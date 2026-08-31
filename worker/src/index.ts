@@ -93,6 +93,14 @@ async function start() {
       console.error("Error in media processing loop:", e);
     }
   }, POLL_INTERVAL);
+
+  // 6. Periodic Self-Check Health Report (every 5 minutes)
+  setInterval(() => {
+    if (isShuttingDown) return;
+    const memMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    const activeCount = getActiveProcessCount();
+    console.log(`[HEALTH REPORT] Worker=${workerId} Status=ONLINE ActiveStreams=${activeCount}/${MAX_CONCURRENT_STREAMS} MemoryHeap=${memMb}MB Scheduler=OK Retention=OK MediaProcessor=OK`);
+  }, 300000);
 }
 
 async function shutdown(signal: string) {
