@@ -70,16 +70,29 @@ export default function AdminRevokeAccessDialog({
     <Dialog
       isOpen={isOpen}
       onClose={handleClose}
-      title="Remove Admin Access Grant"
+      title="Remove Agency Access?"
       maxWidth="md"
     >
       {successResult ? (
-        <div className="py-6 text-center space-y-3">
+        <div className="py-6 text-center space-y-4">
           <div className="w-12 h-12 rounded-full bg-status-success/15 text-status-success flex items-center justify-center mx-auto">
             <CheckCircle2 size={24} />
           </div>
-          <h4 className="font-semibold text-text-primary text-base">Agency Access Removed</h4>
-          <p className="text-xs text-text-secondary">{successResult}</p>
+          <div>
+            <h4 className="font-semibold text-text-primary text-base">Agency Access Removed</h4>
+            <p className="text-xs text-text-secondary mt-1">{successResult}</p>
+          </div>
+          <div className="pt-2">
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={handleClose}
+              className="px-6 text-xs"
+            >
+              Done
+            </Button>
+          </div>
         </div>
       ) : (
         <form onSubmit={handleRevoke} className="space-y-5">
@@ -110,7 +123,7 @@ export default function AdminRevokeAccessDialog({
             <AlertTriangle size={18} className="text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
               <span className="font-semibold text-amber-300">Resource Safety Notice: </span>
-              Your customer's media files, studio scenes, playlists, and broadcast destinations will <strong>not</strong> be deleted. Their concurrency and resource limits will simply adjust to their underlying tier.
+              Your customer's media, scenes, playlists, schedules, and broadcast settings will <strong>not</strong> be deleted. Their concurrency and resource limits will simply adjust to their underlying tier.
             </div>
           </div>
 
@@ -123,7 +136,7 @@ export default function AdminRevokeAccessDialog({
               rows={2}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Promotional period ended, trial concluded..."
+              placeholder="e.g. Promotional period ended, trial concluded, requested downgrade..."
               className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-border/60 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
             />
           </div>
@@ -146,10 +159,11 @@ export default function AdminRevokeAccessDialog({
               type="submit"
               variant="primary"
               className="bg-status-error hover:bg-red-600 text-white shadow-glow"
+              disabled={revokeMutation.isPending}
               isLoading={revokeMutation.isPending}
             >
               <ShieldAlert size={14} />
-              Remove Access Grant
+              Remove Access
             </Button>
           </div>
         </form>

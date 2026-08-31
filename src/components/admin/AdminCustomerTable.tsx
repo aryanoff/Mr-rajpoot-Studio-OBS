@@ -175,7 +175,7 @@ export default function AdminCustomerTable({
                             className="w-full text-left px-3.5 py-2 text-text-primary hover:bg-surface-3 flex items-center gap-2 transition-colors"
                           >
                             <User size={13} />
-                            View Profile
+                            View Customer
                           </button>
 
                           <button
@@ -187,7 +187,7 @@ export default function AdminCustomerTable({
                             className="w-full text-left px-3.5 py-2 text-purple-300 hover:bg-purple-500/10 flex items-center gap-2 transition-colors"
                           >
                             <Shield size={13} className="text-purple-400" />
-                            {c.grant_is_active ? 'Modify Access' : 'Grant Agency'}
+                            {c.grant_is_active ? 'Manage Access' : 'Grant Agency Access'}
                           </button>
 
                           {c.grant_is_active && (

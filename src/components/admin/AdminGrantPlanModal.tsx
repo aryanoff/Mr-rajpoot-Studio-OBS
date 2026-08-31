@@ -53,9 +53,15 @@ export default function AdminGrantPlanModal({
     setErrorMsg(null);
 
     // Validate reason for permanent grants
-    if (expiryType === 'never' && (!reason || reason.trim().length < 4)) {
-      setErrorMsg('Please provide a brief reason for permanent complimentary access.');
-      return;
+    if (expiryType === 'never') {
+      if (!reason || !reason.trim()) {
+        setErrorMsg('You must enter a reason.');
+        return;
+      }
+      if (reason.trim().length < 4) {
+        setErrorMsg('Please provide a little more context (at least 4 characters).');
+        return;
+      }
     }
 
     if (expiryType === 'custom' && !customExpiry) {
@@ -83,10 +89,6 @@ export default function AdminGrantPlanModal({
       });
 
       setSuccessResult(true);
-      setTimeout(() => {
-        onSuccess?.();
-        handleClose();
-      }, 1600);
     } catch (err: any) {
       setIsConfirming(false);
       const msg = err.message || '';
@@ -102,6 +104,20 @@ export default function AdminGrantPlanModal({
     }
   };
 
+  const formatCustomExpiry = (isoString: string) => {
+    if (!isoString) return '';
+    const d = new Date(isoString);
+    return d.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    }) + ' at ' + d.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
+
   const agencyFeatures = [
     '10 concurrent streams',
     '500 GB high-speed storage',
@@ -115,24 +131,41 @@ export default function AdminGrantPlanModal({
     <Dialog
       isOpen={isOpen}
       onClose={handleClose}
-      title={isConfirming ? 'Confirm Plan Access Grant' : 'Grant Agency Access'}
+      title={successResult ? 'Access Updated' : isConfirming ? 'Confirm Plan Access Grant' : 'Grant Agency Access'}
       maxWidth="md"
     >
       <div className="max-h-[75vh] flex flex-col -mx-6 -my-4">
         {/* Scrollable Content Area */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {successResult ? (
-            <div className="py-8 text-center space-y-3">
+            <div className="py-6 text-center space-y-4">
               <div className="w-12 h-12 rounded-full bg-status-success/15 text-status-success flex items-center justify-center mx-auto">
                 <CheckCircle2 size={24} />
               </div>
-              <h4 className="font-semibold text-text-primary text-base">Agency Access Granted</h4>
-              <p className="text-xs text-text-secondary">
-                <strong>{user.full_name || user.username}</strong> now has Agency tier access.
-              </p>
-              <p className="text-[11px] text-text-muted">
-                No payment was collected. The existing Stripe subscription was not changed.
-              </p>
+              <div>
+                <h4 className="font-semibold text-text-primary text-base">Agency Access Granted</h4>
+                <p className="text-xs text-text-secondary mt-1">
+                  <strong>{user.full_name || user.username}</strong> now has Agency tier access.
+                </p>
+                <p className="text-[11px] text-text-muted mt-0.5">
+                  No payment was collected. Their existing Stripe subscription was not changed.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    onSuccess?.();
+                    handleClose();
+                  }}
+                  className="bg-purple-600 hover:bg-purple-500 text-white shadow-glow px-6 text-xs"
+                >
+                  Done
+                </Button>
+              </div>
             </div>
           ) : isConfirming ? (
             /* Confirmation Summary */
@@ -294,8 +327,7 @@ export default function AdminGrantPlanModal({
                     />
                     {customExpiry && (
                       <p className="text-[11px] text-purple-300">
-                        Access expires on {new Date(customExpiry).toLocaleDateString()} at{' '}
-                        {new Date(customExpiry).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
+                        Expires: {formatCustomExpiry(customExpiry)}
                       </p>
                     )}
                   </div>
@@ -311,7 +343,7 @@ export default function AdminGrantPlanModal({
                   rows={2}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Partner access, promotional access, VIP creator, internal testing..."
+                  placeholder="Partner access, promotional access, support resolution, VIP creator..."
                   className="w-full px-3 py-2 rounded-xl bg-surface-2 border border-border/70 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
                 />
               </div>
@@ -321,7 +353,7 @@ export default function AdminGrantPlanModal({
                 <AlertCircle size={15} className="text-accent flex-shrink-0 mt-0.5" />
                 <div>
                   <span className="font-semibold text-text-primary">Important: </span>
-                  This is a complimentary administrative access grant. No payment will be collected. The customer's existing Stripe subscription will not be changed.
+                  No payment will be collected. The customer's existing Stripe subscription will not be changed.
                 </div>
               </div>
             </form>
@@ -364,10 +396,11 @@ export default function AdminGrantPlanModal({
                   variant="primary"
                   size="sm"
                   onClick={handleExecuteGrant}
+                  disabled={grantMutation.isPending}
                   isLoading={grantMutation.isPending}
                   className="bg-purple-600 hover:bg-purple-500 text-white shadow-glow"
                 >
-                  Confirm & Grant Access
+                  {grantMutation.isPending ? 'Granting...' : 'Grant Agency Access'}
                 </Button>
               </>
             ) : (
