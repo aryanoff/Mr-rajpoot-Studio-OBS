@@ -1,4 +1,5 @@
 import { getSupabase } from '../../lib/supabase';
+import { billingService } from '../billing/billing.service';
 import type {
   AdminBillingOverview,
   AdminPlanDistribution,
@@ -215,4 +216,82 @@ export const adminBillingService = {
 
     return data as string;
   },
+
+  /**
+   * Fetches customer audit log activity history for the customer drawer.
+   */
+  async getCustomerActivity(userId: string, limit = 20): Promise<import('./adminBilling.types').AdminCustomerActivityItem[]> {
+    if (!userId) return [];
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from('billing_audit_logs')
+      .select('*')
+      .eq('target_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.warn(`Failed to fetch activity for user ${userId}:`, error.message);
+      return [];
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      action: row.action,
+      admin_user_id: row.admin_user_id ?? null,
+      target_id: row.target_id ?? null,
+      details: (row.details as Record<string, any>) || {},
+      created_at: row.created_at,
+    }));
+  },
+
+  /**
+   * Aggregates real platform resource usage for a specific customer.
+   */
+  async getCustomerUsage(userId: string): Promise<import('./adminBilling.types').AdminCustomerUsageSummary> {
+    const supabase = getSupabase();
+
+    const [entitlementsRes, usage, liveStreamsRes, totalStreamsRes, mediaRes] = await Promise.all([
+      supabase.rpc('get_effective_entitlements', { p_user_id: userId }),
+      billingService.getUsage(userId),
+      supabase.from('streams').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'live'),
+      supabase.from('streams').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+      supabase.from('media_assets').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('deletion_status', 'active'),
+    ]);
+
+    const ent = entitlementsRes.data?.[0];
+
+    return {
+      user_id: userId,
+      storage_bytes: usage.storage_bytes,
+      max_storage_bytes: ent?.max_storage_bytes ?? null,
+      file_count: mediaRes.count || 0,
+      live_streams_count: liveStreamsRes.count || 0,
+      total_streams_count: totalStreamsRes.count || 0,
+      max_concurrent_streams: ent?.max_concurrent_streams ?? null,
+      scenes_count: usage.scenes_count,
+      playlists_count: usage.playlists_count,
+      schedules_count: usage.schedules_count,
+      destinations_count: usage.destinations_count,
+    };
+  },
+
+  /**
+   * Fetches total count of live streams platform-wide.
+   */
+  async getActiveStreamsCount(): Promise<number> {
+    const supabase = getSupabase();
+    const { count, error } = await supabase
+      .from('streams')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'live');
+
+    if (error) {
+      console.warn('Failed to fetch active streams count:', error.message);
+      return 0;
+    }
+
+    return count || 0;
+  },
 };
+

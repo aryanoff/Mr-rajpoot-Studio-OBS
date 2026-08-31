@@ -1,133 +1,116 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   CreditCard,
-  DollarSign,
-  TrendingUp,
-  Users,
-  AlertTriangle,
   Activity,
-  RefreshCw,
-  Search,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  RotateCcw,
-  HardDrive,
-  Radio,
-  ChevronLeft,
-  ChevronRight,
-  ShieldCheck,
-  Sparkles,
+  Users,
   Shield,
+  RotateCcw,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import Card from '../../components/ui/Card';
-import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
+import Badge from '../../components/ui/Badge';
+import AdminBillingOverview from '../../components/admin/AdminBillingOverview';
+import AdminCustomerTable from '../../components/admin/AdminCustomerTable';
+import AdminCustomerFilters from '../../components/admin/AdminCustomerFilters';
+import AdminCustomerDrawer from '../../components/admin/AdminCustomerDrawer';
+import AdminGrantPlanModal from '../../components/admin/AdminGrantPlanModal';
+import AdminRevokeAccessDialog from '../../components/admin/AdminRevokeAccessDialog';
+import AdminBillingHealth from '../../components/admin/AdminBillingHealth';
 import {
   useAdminBillingOverview,
   useAdminPlanDistribution,
-  useAdminSubscriptions,
-  useAdminWebhookEvents,
-  useAdminRevenueSnapshots,
-  useAdminRetryWebhookMutation,
   useAdminTakeSnapshotMutation,
 } from '../../features/adminBilling/adminBilling.hooks';
-import {
-  useAdminUserPlanGrants,
-  useAdminRevokePlanGrantMutation,
-} from '../../features/billing/billing.hooks';
-import AdminGrantPlanModal from '../../components/admin/AdminGrantPlanModal';
-import { formatBytes } from '../../lib/utils';
-import type { AdminSubscription } from '../../features/adminBilling/adminBilling.types';
+import { useAdminUserPlanGrants } from '../../features/billing/billing.hooks';
 import type { AdminUserPlanGrantItem } from '../../features/billing/billing.types';
+import type { AdminTabType } from '../../features/adminBilling/adminBilling.types';
 
 export default function AdminBilling() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'grants' | 'subscriptions' | 'webhooks'>('overview');
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [planFilter, setPlanFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const [webhookStatusFilter, setWebhookStatusFilter] = useState('');
-  const [selectedSub, setSelectedSub] = useState<AdminSubscription | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentTab = (searchParams.get('tab') as AdminTabType) || 'overview';
 
-  // Manual Grant State
-  const [grantUserSearch, setGrantUserSearch] = useState('');
-  const [grantModalUser, setGrantModalUser] = useState<AdminUserPlanGrantItem | null>(null);
+  // Customer Filtering State
+  const [search, setSearch] = useState('');
+  const [planFilter, setPlanFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
+  const [page, setPage] = useState(1);
+
+  // Selected Item States
+  const [drawerCustomer, setDrawerCustomer] = useState<AdminUserPlanGrantItem | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  const [grantCustomer, setGrantCustomer] = useState<AdminUserPlanGrantItem | null>(null);
   const [isGrantModalOpen, setIsGrantModalOpen] = useState(false);
 
+  const [revokeCustomer, setRevokeCustomer] = useState<AdminUserPlanGrantItem | null>(null);
+  const [isRevokeDialogOpen, setIsRevokeDialogOpen] = useState(false);
+
   // Queries
-  const { data: overview, isLoading: overviewLoading, refetch: refetchOverview } = useAdminBillingOverview();
-  const { data: distribution, isLoading: distLoading, refetch: refetchDist } = useAdminPlanDistribution();
-  const { data: subData, isLoading: subsLoading, refetch: refetchSubs } = useAdminSubscriptions({
-    search,
-    status: statusFilter,
-    plan_id: planFilter,
-    page,
-    limit: 10,
-  });
-  const { data: webhookData, isLoading: webhooksLoading, refetch: refetchWebhooks } = useAdminWebhookEvents({
-    status: webhookStatusFilter,
-    page: 1,
-    limit: 10,
-  });
-  const { refetch: refetchSnapshots } = useAdminRevenueSnapshots(30);
+  const { data: allGrants = [], isLoading: grantsLoading, refetch: refetchGrants } = useAdminUserPlanGrants(search);
+  const { refetch: refetchOverview } = useAdminBillingOverview();
+  const { refetch: refetchDist } = useAdminPlanDistribution();
 
-  // User Plan Grants Query & Revoke Mutation
-  const { data: userGrants = [], isLoading: grantsLoading, refetch: refetchGrants } = useAdminUserPlanGrants(grantUserSearch);
-  const revokeGrantMutation = useAdminRevokePlanGrantMutation();
-
-  // Mutations
-  const retryMutation = useAdminRetryWebhookMutation();
+  // Snapshot Mutation
   const takeSnapshotMutation = useAdminTakeSnapshotMutation();
+
+  const handleTabChange = (tab: AdminTabType) => {
+    searchParams.set('tab', tab);
+    setSearchParams(searchParams, { replace: true });
+  };
 
   const handleRefreshAll = () => {
     refetchOverview();
     refetchDist();
-    refetchSubs();
-    refetchWebhooks();
-    refetchSnapshots();
     refetchGrants();
   };
 
-  const formatCurrency = (cents: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(cents / 100);
-  };
+  // Filter in-memory for fast client-side responsiveness
+  const filteredCustomers = allGrants.filter((c) => {
+    if (planFilter && c.effective_plan_id !== planFilter) return false;
+    if (sourceFilter && c.entitlement_source !== sourceFilter) return false;
+    return true;
+  });
 
-  const totalSubsCount = subData?.totalCount || 0;
-  const totalPages = Math.ceil(totalSubsCount / 10) || 1;
+  const PAGE_SIZE = 10;
+  const totalPages = Math.ceil(filteredCustomers.length / PAGE_SIZE) || 1;
+  const pagedCustomers = filteredCustomers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // Manual Grants only list (for Plans & Access tab)
+  const manualGrantCustomers = allGrants.filter((c) => c.grant_is_active);
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-16">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/60 pb-6">
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* Top Header Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/60 pb-5">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <div className="p-2 rounded-xl bg-accent/10 text-accent">
+            <div className="p-2 rounded-xl bg-purple-500/15 text-purple-400">
               <CreditCard size={20} />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-text-primary">
               Billing & Revenue Command Center
             </h1>
+            <Badge variant="scheduled" size="sm" className="ml-2 font-mono text-[10px]">
+              Production
+            </Badge>
           </div>
-          <p className="text-sm text-text-secondary">
-            Real-time SaaS monetization metrics, subscription lifecycle operations, and webhook reliability.
+          <p className="text-xs text-text-muted">
+            Monetization health, customer plan management, and audited manual grants.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <Button
             variant="outline"
             size="sm"
             onClick={() => takeSnapshotMutation.mutate()}
             disabled={takeSnapshotMutation.isPending}
-            className="flex items-center gap-1.5"
+            className="flex items-center gap-1.5 text-xs"
           >
-            <Sparkles size={14} className="text-accent" />
+            <Sparkles size={13} className="text-accent" />
             <span>{takeSnapshotMutation.isPending ? 'Saving...' : 'Record Snapshot'}</span>
           </Button>
 
@@ -135,843 +118,255 @@ export default function AdminBilling() {
             variant="outline"
             size="sm"
             onClick={handleRefreshAll}
-            className="flex items-center gap-1.5"
+            className="flex items-center gap-1.5 text-xs"
           >
-            <RefreshCw size={14} />
+            <RefreshCw size={13} />
             <span>Refresh</span>
           </Button>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
+      {/* Navigation Tab Bar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border/40 pb-2">
         <button
-          onClick={() => setActiveTab('overview')}
+          type="button"
+          onClick={() => handleTabChange('overview')}
           className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
-            activeTab === 'overview'
+            currentTab === 'overview'
               ? 'bg-accent text-white shadow-glow'
               : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
           }`}
         >
-          <Activity size={15} />
-          Overview & Economics
+          <Activity size={14} />
+          Overview
         </button>
+
         <button
-          onClick={() => setActiveTab('grants')}
+          type="button"
+          onClick={() => handleTabChange('customers')}
           className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
-            activeTab === 'grants'
+            currentTab === 'customers'
+              ? 'bg-accent text-white shadow-glow'
+              : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
+          }`}
+        >
+          <Users size={14} />
+          Customers ({allGrants.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange('access')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+            currentTab === 'access'
               ? 'bg-purple-600 text-white shadow-glow'
               : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
           }`}
         >
-          <Shield size={15} />
-          User Plan Grants & Overrides
+          <Shield size={14} />
+          Plans & Access ({manualGrantCustomers.length} Grants)
         </button>
+
         <button
-          onClick={() => setActiveTab('subscriptions')}
+          type="button"
+          onClick={() => handleTabChange('health')}
           className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
-            activeTab === 'subscriptions'
+            currentTab === 'health'
               ? 'bg-accent text-white shadow-glow'
               : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
           }`}
         >
-          <Users size={15} />
-          Stripe Subscriptions
-        </button>
-        <button
-          onClick={() => setActiveTab('webhooks')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
-            activeTab === 'webhooks'
-              ? 'bg-accent text-white shadow-glow'
-              : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
-          }`}
-        >
-          <RotateCcw size={15} />
-          Webhooks & Ingest
+          <RotateCcw size={14} />
+          Billing Health
         </button>
       </div>
 
-      {/* Top KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Active Subscribers */}
-        <Card variant="glass" className="relative overflow-hidden p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Active Subscribers
-            </span>
-            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
-              <Users size={18} />
-            </div>
-          </div>
-          <div className="mt-3">
-            {overviewLoading ? (
-              <div className="h-8 bg-surface-3 rounded w-20 animate-pulse" />
-            ) : (
-              <div className="text-2xl font-bold text-text-primary">
-                {overview?.active_subscribers || 0}
-              </div>
-            )}
-            <div className="mt-1 flex items-center gap-1.5 text-xs text-text-muted">
-              <span className="text-emerald-500 font-medium">+{overview?.new_subscribers_30d || 0}</span>
-              <span>new in last 30 days</span>
-            </div>
-          </div>
-        </Card>
+      {/* TAB A: OVERVIEW */}
+      {currentTab === 'overview' && <AdminBillingOverview />}
 
-        {/* Monthly Recurring Revenue (MRR) */}
-        <Card variant="glass" className="relative overflow-hidden p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Monthly Recurring Revenue
-            </span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
-              <DollarSign size={18} />
-            </div>
-          </div>
-          <div className="mt-3">
-            {overviewLoading ? (
-              <div className="h-8 bg-surface-3 rounded w-28 animate-pulse" />
-            ) : (
-              <div className="text-2xl font-bold text-text-primary">
-                {formatCurrency(overview?.mrr_cents || 0)}
-              </div>
-            )}
-            <div className="mt-1 text-xs text-text-muted">
-              Active paid recurring run-rate
-            </div>
-          </div>
-        </Card>
-
-        {/* Estimated ARR */}
-        <Card variant="glass" className="relative overflow-hidden p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Estimated ARR
-            </span>
-            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
-              <TrendingUp size={18} />
-            </div>
-          </div>
-          <div className="mt-3">
-            {overviewLoading ? (
-              <div className="h-8 bg-surface-3 rounded w-28 animate-pulse" />
-            ) : (
-              <div className="text-2xl font-bold text-text-primary">
-                {formatCurrency(overview?.estimated_arr_cents || 0)}
-              </div>
-            )}
-            <div className="mt-1 text-xs text-text-muted">
-              Annualized (MRR × 12)
-            </div>
-          </div>
-        </Card>
-
-        {/* At-Risk / Past Due */}
-        <Card variant="glass" className="relative overflow-hidden p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-              At-Risk / Past Due
-            </span>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
-              <AlertTriangle size={18} />
-            </div>
-          </div>
-          <div className="mt-3">
-            {overviewLoading ? (
-              <div className="h-8 bg-surface-3 rounded w-16 animate-pulse" />
-            ) : (
-              <div className="text-2xl font-bold text-text-primary">
-                {overview?.past_due_count || 0}
-              </div>
-            )}
-            <div className="mt-1 flex items-center gap-1 text-xs text-text-muted">
-              <span>{overview?.cancellations_30d || 0} cancellations in 30d</span>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Plan Distribution & Revenue Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Tier Distribution */}
-        <Card variant="glass" className="p-6 lg:col-span-2">
-          <div className="flex items-center justify-between mb-6">
+      {/* TAB B: CUSTOMERS */}
+      {currentTab === 'customers' && (
+        <Card variant="glass" className="p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="font-semibold text-text-primary flex items-center gap-2">
-                <Activity size={18} className="text-accent" />
-                Subscription Plan Performance
+              <h3 className="font-semibold text-text-primary text-sm flex items-center gap-2">
+                <Users size={16} className="text-accent" />
+                Customer Subscription & Access Management
               </h3>
               <p className="text-xs text-text-muted mt-0.5">
-                Current subscriber distribution and monthly revenue generation per tier
+                Inspect customer entitlements, view resource usage, and grant administrative access.
               </p>
             </div>
           </div>
 
-          <div className="space-y-4">
-            {distLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-12 bg-surface-3 rounded animate-pulse" />
-                ))}
-              </div>
-            ) : (
-              distribution?.map((item) => {
-                const isFree = item.plan_id === 'free';
-                return (
-                  <div
-                    key={item.plan_id}
-                    className="p-4 rounded-xl bg-surface-2 border border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-surface-3 flex items-center justify-center font-bold text-sm text-text-primary capitalize">
-                        {item.plan_id.substring(0, 2)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-text-primary">{item.plan_name}</span>
-                          <Badge variant="default" size="sm">
-                            {isFree ? 'Free' : formatCurrency(item.price_amount) + '/mo'}
-                          </Badge>
-                        </div>
-                        <span className="text-xs text-text-muted">
-                          {item.subscriber_count} active subscriber{item.subscriber_count !== 1 ? 's' : ''}
-                        </span>
-                      </div>
-                    </div>
+          <AdminCustomerFilters
+            search={search}
+            onSearchChange={(val) => {
+              setSearch(val);
+              setPage(1);
+            }}
+            planFilter={planFilter}
+            onPlanFilterChange={(val) => {
+              setPlanFilter(val);
+              setPage(1);
+            }}
+            sourceFilter={sourceFilter}
+            onSourceFilterChange={(val) => {
+              setSourceFilter(val);
+              setPage(1);
+            }}
+            isLoading={grantsLoading}
+          />
 
-                    <div className="text-right">
-                      <div className="font-mono font-semibold text-text-primary">
-                        {formatCurrency(item.mrr_cents)}
-                      </div>
-                      <span className="text-[11px] text-text-muted">Monthly Contribution</span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+          <AdminCustomerTable
+            customers={pagedCustomers}
+            isLoading={grantsLoading}
+            onSelectCustomer={(c) => {
+              setDrawerCustomer(c);
+              setIsDrawerOpen(true);
+            }}
+            onGrantAccess={(c) => {
+              setGrantCustomer(c);
+              setIsGrantModalOpen(true);
+            }}
+            onRevokeAccess={(c) => {
+              setRevokeCustomer(c);
+              setIsRevokeDialogOpen(true);
+            }}
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            totalCount={filteredCustomers.length}
+          />
         </Card>
+      )}
 
-        {/* Platform Economics */}
-        <Card variant="glass" className="p-6 flex flex-col justify-between">
-          <div>
-            <h3 className="font-semibold text-text-primary flex items-center gap-2 mb-1">
-              <HardDrive size={18} className="text-accent" />
-              Platform Resource Footprint
-            </h3>
-            <p className="text-xs text-text-muted mb-6">
-              Aggregate infrastructure utilization across active users
-            </p>
-
-            <div className="space-y-5">
-              <div>
-                <div className="flex justify-between text-xs text-text-secondary mb-1">
-                  <span>Total Storage Allocated</span>
-                  <span className="font-mono font-medium text-text-primary">
-                    {formatBytes(overview?.total_storage_bytes || 0)}
-                  </span>
-                </div>
-                <div className="h-2 bg-surface-3 rounded-full overflow-hidden">
-                  <div className="h-full bg-accent rounded-full w-2/5" />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs text-text-secondary mb-1">
-                  <span>Total Stream Broadcasts</span>
-                  <span className="font-mono font-medium text-text-primary">
-                    {Math.round((overview?.total_stream_seconds || 0) / 3600)} Hours
-                  </span>
-                </div>
-                <div className="h-2 bg-surface-3 rounded-full overflow-hidden">
-                  <div className="h-full bg-status-success rounded-full w-3/5" />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs text-text-secondary mb-1">
-                  <span>Registered Creators</span>
-                  <span className="font-mono font-medium text-text-primary">
-                    {overview?.total_users || 0} accounts
-                  </span>
-                </div>
-                <div className="h-2 bg-surface-3 rounded-full overflow-hidden">
-                  <div className="h-full bg-purple-500 rounded-full w-1/2" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-border/50 flex items-center justify-between text-xs text-text-muted">
-            <span className="flex items-center gap-1.5">
-              <ShieldCheck size={14} className="text-emerald-500" />
-              RLS & Vault Secure
-            </span>
-            <span>Live Aggregations</span>
-          </div>
-        </Card>
-      </div>
-
-      {/* User Plan Grants & Overrides Management Panel */}
-      {(activeTab === 'grants' || activeTab === 'overview') && (
-        <Card variant="glass" className="p-6 border-purple-500/30 shadow-glow">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+      {/* TAB C: PLANS & ACCESS (MANUAL OVERRIDES) */}
+      {currentTab === 'access' && (
+        <Card variant="glass" className="p-5 border-purple-500/30 shadow-glow space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-4">
             <div>
-              <h3 className="font-semibold text-text-primary text-lg flex items-center gap-2">
-                <Shield size={20} className="text-purple-400" />
-                Admin Manual Plan Grants & Overrides
+              <h3 className="font-semibold text-text-primary text-base flex items-center gap-2">
+                <Shield size={18} className="text-purple-400" />
+                Manual Plan Grants & Access Overrides
               </h3>
               <p className="text-xs text-text-muted mt-0.5">
-                Assign Agency or customized plan access directly to creators without requiring Stripe payment.
+                Complimentary Agency and custom tier assignments without Stripe billing or invoice requirements.
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="relative min-w-[260px]">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                <input
-                  type="text"
-                  placeholder="Search user email, name, ID..."
-                  value={grantUserSearch}
-                  onChange={(e) => setGrantUserSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-surface-2 border border-border/60 rounded-lg text-text-primary focus:outline-none focus:border-purple-500"
-                />
-              </div>
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => refetchGrants()}
-                disabled={grantsLoading}
-                className="flex items-center gap-1.5 text-xs"
+                onClick={() => handleTabChange('customers')}
+                className="text-xs"
               >
-                <RefreshCw size={13} className={grantsLoading ? 'animate-spin' : ''} />
-                Refresh
+                Browse All Customers
               </Button>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border text-text-muted font-medium uppercase tracking-wider">
-                  <th className="pb-3 pr-4">Creator / User</th>
-                  <th className="pb-3 px-4">Effective Plan</th>
-                  <th className="pb-3 px-4">Access Source</th>
-                  <th className="pb-3 px-4">Manual Grant Status</th>
-                  <th className="pb-3 px-4">Grant Expiration</th>
-                  <th className="pb-3 px-4">Stripe Sub</th>
-                  <th className="pb-3 pl-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40">
-                {grantsLoading ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-text-muted">
-                      Loading user entitlements...
-                    </td>
-                  </tr>
-                ) : userGrants.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-text-muted">
-                      No matching user accounts found.
-                    </td>
-                  </tr>
-                ) : (
-                  userGrants.map((u) => {
-                    const isAgency = u.effective_plan_id === 'agency';
-                    const hasActiveGrant = u.grant_is_active;
+          {/* Active Grants Overview */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3.5 rounded-xl bg-surface-2 border border-border/60">
+              <span className="text-[11px] text-text-muted block">Active Manual Grants</span>
+              <div className="text-xl font-bold text-purple-400 mt-1">
+                {manualGrantCustomers.length}
+              </div>
+            </div>
+            <div className="p-3.5 rounded-xl bg-surface-2 border border-border/60">
+              <span className="text-[11px] text-text-muted block">Agency Tier Grants</span>
+              <div className="text-xl font-bold text-text-primary mt-1">
+                {manualGrantCustomers.filter((c) => c.effective_plan_id === 'agency').length}
+              </div>
+            </div>
+            <div className="p-3.5 rounded-xl bg-surface-2 border border-border/60">
+              <span className="text-[11px] text-text-muted block">Indefinite (No Expiry)</span>
+              <div className="text-xl font-bold text-text-primary mt-1">
+                {manualGrantCustomers.filter((c) => !c.grant_expires_at).length}
+              </div>
+            </div>
+          </div>
 
-                    return (
-                      <tr key={u.user_id} className="hover:bg-surface-2/40 transition-colors">
-                        <td className="py-3.5 pr-4">
-                          <div className="font-medium text-text-primary flex items-center gap-1.5">
-                            <span>{u.full_name || u.username || 'Anonymous User'}</span>
-                            {u.role === 'admin' && (
-                              <Badge variant="scheduled" size="sm" className="text-[10px] py-0 px-1">
-                                Admin
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-text-muted truncate max-w-[200px]">
-                            {u.email || u.user_id}
-                          </div>
-                        </td>
+          {/* Manual Grants Table */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Active Administrative Grants
+            </h4>
 
-                        <td className="py-3.5 px-4">
-                          <Badge
-                            variant={isAgency ? 'scheduled' : 'default'}
-                            size="sm"
-                            className="capitalize font-semibold"
-                          >
-                            {u.effective_plan_name}
-                          </Badge>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          <Badge
-                            variant={
-                              u.entitlement_source === 'admin_grant'
-                                ? 'success'
-                                : 'default'
-                            }
-                            size="sm"
-                            className="capitalize"
-                          >
-                            {u.entitlement_source === 'admin_grant'
-                              ? 'Admin Grant'
-                              : u.entitlement_source === 'stripe'
-                              ? 'Stripe Paid'
-                              : 'Free Fallback'}
-                          </Badge>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          {hasActiveGrant ? (
-                            <span className="text-status-success font-medium flex items-center gap-1">
-                              <CheckCircle2 size={13} /> Active ({u.grant_plan_id?.toUpperCase()})
-                            </span>
-                          ) : (
-                            <span className="text-text-muted">None</span>
-                          )}
-                        </td>
-
-                        <td className="py-3.5 px-4 text-text-secondary">
-                          {hasActiveGrant ? (
-                            u.grant_expires_at ? (
-                              new Date(u.grant_expires_at).toLocaleDateString()
-                            ) : (
-                              'Never (Indefinite)'
-                            )
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-
-                        <td className="py-3.5 px-4 font-mono text-[11px] text-text-muted">
-                          {u.stripe_plan_id ? `${u.stripe_plan_id.toUpperCase()} (${u.stripe_status})` : 'None'}
-                        </td>
-
-                        <td className="py-3.5 pl-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {hasActiveGrant ? (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setGrantModalUser(u);
-                                    setIsGrantModalOpen(true);
-                                  }}
-                                  className="text-xs text-purple-400 border-purple-500/40 hover:bg-purple-500/10"
-                                >
-                                  Modify Grant
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  disabled={revokeGrantMutation.isPending}
-                                  onClick={async () => {
-                                    if (
-                                      window.confirm(
-                                        `Revoke manual plan grant for ${u.full_name || u.email}? Effective access will return to ${
-                                          u.stripe_plan_id ? u.stripe_plan_id.toUpperCase() : 'Free'
-                                        }.`
-                                      )
-                                    ) {
-                                      if (u.grant_id) {
-                                        await revokeGrantMutation.mutateAsync({
-                                          grantId: u.grant_id,
-                                          userId: u.user_id,
-                                        });
-                                      }
-                                    }
-                                  }}
-                                  className="text-xs text-status-error hover:bg-status-error/10"
-                                >
-                                  Revoke
-                                </Button>
-                              </>
-                            ) : (
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => {
-                                  setGrantModalUser(u);
-                                  setIsGrantModalOpen(true);
-                                }}
-                                className="text-xs bg-purple-600 hover:bg-purple-500 text-white"
-                              >
-                                <Shield size={13} />
-                                Grant Agency
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+            <AdminCustomerTable
+              customers={manualGrantCustomers}
+              isLoading={grantsLoading}
+              onSelectCustomer={(c) => {
+                setDrawerCustomer(c);
+                setIsDrawerOpen(true);
+              }}
+              onGrantAccess={(c) => {
+                setGrantCustomer(c);
+                setIsGrantModalOpen(true);
+              }}
+              onRevokeAccess={(c) => {
+                setRevokeCustomer(c);
+                setIsRevokeDialogOpen(true);
+              }}
+              page={1}
+              totalPages={1}
+              onPageChange={() => {}}
+              totalCount={manualGrantCustomers.length}
+            />
           </div>
         </Card>
       )}
 
-      {/* Subscription Operations & Customer Search */}
-      <Card variant="glass" className="p-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div>
-            <h3 className="font-semibold text-text-primary text-lg flex items-center gap-2">
-              <Users size={18} className="text-accent" />
-              Subscription Operations
-            </h3>
-            <p className="text-xs text-text-muted">
-              Live customer subscription registry and entitlement state management
-            </p>
-          </div>
+      {/* TAB D: BILLING HEALTH */}
+      {currentTab === 'health' && <AdminBillingHealth />}
 
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[220px]">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-              <input
-                type="text"
-                placeholder="Search user, name, ID..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-surface-2 border border-border/60 rounded-lg text-text-primary focus:outline-none focus:border-accent"
-              />
-            </div>
+      {/* Right-Side Sliding Customer Drawer */}
+      <AdminCustomerDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => {
+          setIsDrawerOpen(false);
+          setDrawerCustomer(null);
+        }}
+        customer={drawerCustomer}
+        onGrantAccess={(c) => {
+          setIsDrawerOpen(false);
+          setGrantCustomer(c);
+          setIsGrantModalOpen(true);
+        }}
+        onRevokeAccess={(c) => {
+          setIsDrawerOpen(false);
+          setRevokeCustomer(c);
+          setIsRevokeDialogOpen(true);
+        }}
+      />
 
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
-              aria-label="Filter subscriptions by status"
-              className="px-3 py-1.5 text-xs bg-surface-2 border border-border/60 rounded-lg text-text-primary focus:outline-none focus:border-accent"
-            >
-              <option value="">All Statuses</option>
-              <option value="active">Active</option>
-              <option value="trialing">Trialing</option>
-              <option value="past_due">Past Due</option>
-              <option value="canceled">Canceled</option>
-            </select>
-
-            <select
-              value={planFilter}
-              onChange={(e) => {
-                setPlanFilter(e.target.value);
-                setPage(1);
-              }}
-              aria-label="Filter subscriptions by plan"
-              className="px-3 py-1.5 text-xs bg-surface-2 border border-border/60 rounded-lg text-text-primary focus:outline-none focus:border-accent"
-            >
-              <option value="">All Plans</option>
-              <option value="creator">Creator</option>
-              <option value="pro">Pro</option>
-              <option value="agency">Agency</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Subscriptions Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-border text-text-muted font-medium uppercase tracking-wider">
-                <th className="pb-3 pr-4">Customer</th>
-                <th className="pb-3 px-4">Plan Tier</th>
-                <th className="pb-3 px-4">Status</th>
-                <th className="pb-3 px-4">Current Period</th>
-                <th className="pb-3 px-4">Monthly Rate</th>
-                <th className="pb-3 px-4">Provider ID</th>
-                <th className="pb-3 pl-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {subsLoading ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-text-muted">
-                    Loading subscriptions...
-                  </td>
-                </tr>
-              ) : subData?.subscriptions.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-text-muted">
-                    No matching subscription records found.
-                  </td>
-                </tr>
-              ) : (
-                subData?.subscriptions.map((sub) => {
-                  const isPastDue = sub.status === 'past_due';
-                  const isCanceled = sub.status === 'canceled';
-
-                  return (
-                    <tr key={sub.id} className="hover:bg-surface-2/40 transition-colors">
-                      <td className="py-3.5 pr-4">
-                        <div className="font-medium text-text-primary">
-                          {sub.full_name || sub.username || 'Anonymous Creator'}
-                        </div>
-                        <div className="text-[11px] text-text-muted font-mono truncate max-w-[140px]">
-                          {sub.user_id}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <Badge variant="default" size="sm" className="capitalize">
-                          {sub.plan_name}
-                        </Badge>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <Badge
-                          variant={isPastDue ? 'error' : isCanceled ? 'default' : 'success'}
-                          size="sm"
-                          className="capitalize"
-                        >
-                          {sub.status}
-                        </Badge>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-text-secondary">
-                        <div>
-                          {new Date(sub.current_period_end).toLocaleDateString()}
-                        </div>
-                        {sub.cancel_at_period_end && (
-                          <span className="text-[10px] text-amber-500 font-medium">Cancels at end</span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono font-medium text-text-primary">
-                        {formatCurrency(sub.price_amount)}
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono text-[11px] text-text-muted">
-                        {sub.masked_provider_sub_id || '—'}
-                      </td>
-
-                      <td className="py-3.5 pl-4 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedSub(sub)}
-                          className="text-xs text-accent hover:text-accent-light"
-                        >
-                          View Details
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Controls */}
-        <div className="flex items-center justify-between mt-5 pt-4 border-t border-border/50 text-xs text-text-muted">
-          <div>
-            Showing {(page - 1) * 10 + 1} to {Math.min(page * 10, totalSubsCount)} of {totalSubsCount} subscriptions
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="p-1.5"
-            >
-              <ChevronLeft size={14} />
-            </Button>
-            <span className="px-2 font-medium text-text-primary">
-              Page {page} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="p-1.5"
-            >
-              <ChevronRight size={14} />
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {/* Webhook Reliability & Monitor */}
-      <Card variant="glass" className="p-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div>
-            <h3 className="font-semibold text-text-primary text-lg flex items-center gap-2">
-              <Radio size={18} className="text-accent" />
-              Webhook Reliability & Ingestion Monitor
-            </h3>
-            <p className="text-xs text-text-muted">
-              Cryptographically verified Stripe webhook delivery audit ledger
-            </p>
-          </div>
-
-          <select
-            value={webhookStatusFilter}
-            onChange={(e) => setWebhookStatusFilter(e.target.value)}
-            aria-label="Filter webhook events by status"
-            className="px-3 py-1.5 text-xs bg-surface-2 border border-border/60 rounded-lg text-text-primary focus:outline-none focus:border-accent"
-          >
-            <option value="">All Webhook Events</option>
-            <option value="processed">Processed</option>
-            <option value="failed">Failed</option>
-            <option value="pending">Pending</option>
-          </select>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-border text-text-muted font-medium uppercase tracking-wider">
-                <th className="pb-3 pr-4">Event Type</th>
-                <th className="pb-3 px-4">Provider Event ID</th>
-                <th className="pb-3 px-4">Received Time</th>
-                <th className="pb-3 px-4">Status</th>
-                <th className="pb-3 pl-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {webhooksLoading ? (
-                <tr>
-                  <td colSpan={5} className="py-6 text-center text-text-muted">
-                    Loading webhook log...
-                  </td>
-                </tr>
-              ) : webhookData?.events.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-6 text-center text-text-muted">
-                    No webhook events recorded.
-                  </td>
-                </tr>
-              ) : (
-                webhookData?.events.map((evt) => {
-                  const isFailed = evt.processing_status === 'failed';
-                  const isProcessed = evt.processing_status === 'processed';
-
-                  return (
-                    <tr key={evt.id} className="hover:bg-surface-2/40 transition-colors">
-                      <td className="py-3 pr-4 font-mono font-medium text-text-primary">
-                        {evt.event_type}
-                      </td>
-
-                      <td className="py-3 px-4 font-mono text-[11px] text-text-muted">
-                        {evt.provider_event_id}
-                      </td>
-
-                      <td className="py-3 px-4 text-text-secondary">
-                        {new Date(evt.received_at).toLocaleTimeString()} · {new Date(evt.received_at).toLocaleDateString()}
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1.5">
-                          {isProcessed && <CheckCircle2 size={13} className="text-emerald-500" />}
-                          {isFailed && <XCircle size={13} className="text-red-500" />}
-                          {!isProcessed && !isFailed && <Clock size={13} className="text-amber-500" />}
-                          <span className="capitalize">{evt.processing_status}</span>
-                        </div>
-                      </td>
-
-                      <td className="py-3 pl-4 text-right">
-                        {isFailed && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => retryMutation.mutate(evt.id)}
-                            disabled={retryMutation.isPending}
-                            className="text-xs flex items-center gap-1"
-                          >
-                            <RotateCcw size={12} />
-                            <span>Replay</span>
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      {/* Customer Detail Drawer Modal */}
-      {selectedSub && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card variant="glass" className="max-w-md w-full p-6 relative">
-            <div className="flex items-center justify-between border-b border-border pb-4 mb-4">
-              <h3 className="font-semibold text-text-primary text-base">
-                Subscription Operational Details
-              </h3>
-              <button
-                onClick={() => setSelectedSub(null)}
-                className="text-text-muted hover:text-text-primary p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="flex justify-between py-1 border-b border-border/30">
-                <span className="text-text-muted">Customer Name</span>
-                <span className="font-medium text-text-primary">{selectedSub.full_name || selectedSub.username || '—'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-border/30">
-                <span className="text-text-muted">User ID</span>
-                <span className="font-mono text-text-primary">{selectedSub.user_id}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-border/30">
-                <span className="text-text-muted">Current Plan</span>
-                <span className="font-semibold text-accent capitalize">{selectedSub.plan_name}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-border/30">
-                <span className="text-text-muted">Subscription Status</span>
-                <span className="font-medium capitalize">{selectedSub.status}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-border/30">
-                <span className="text-text-muted">Period End</span>
-                <span>{new Date(selectedSub.current_period_end).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-border/30">
-                <span className="text-text-muted">Monthly Revenue Rate</span>
-                <span className="font-mono font-bold text-text-primary">{formatCurrency(selectedSub.price_amount)}</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-text-muted">Masked Stripe ID</span>
-                <span className="font-mono">{selectedSub.masked_provider_sub_id || 'None'}</span>
-              </div>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-border flex justify-end">
-              <Button variant="primary" size="sm" onClick={() => setSelectedSub(null)}>
-                Close
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Admin Manual Grant Modal */}
+      {/* Compact Grant Agency Access Dialog (<= 80vh) */}
       <AdminGrantPlanModal
         isOpen={isGrantModalOpen}
         onClose={() => {
           setIsGrantModalOpen(false);
-          setGrantModalUser(null);
+          setGrantCustomer(null);
         }}
-        user={grantModalUser}
+        user={grantCustomer}
         onSuccess={() => {
           refetchGrants();
+          refetchOverview();
+        }}
+      />
+
+      {/* Revoke Access Confirmation Dialog */}
+      <AdminRevokeAccessDialog
+        isOpen={isRevokeDialogOpen}
+        onClose={() => {
+          setIsRevokeDialogOpen(false);
+          setRevokeCustomer(null);
+        }}
+        customer={revokeCustomer}
+        onSuccess={() => {
+          refetchGrants();
+          refetchOverview();
         }}
       />
     </div>

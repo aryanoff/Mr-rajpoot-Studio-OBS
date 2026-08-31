@@ -22,6 +22,7 @@
 - **Phase 14B Real Media Loop Acceptance, EOF Hardening & UX Verification (2026-08-31T15:39Z)**: Verified physical media looping via local FFmpeg execution (`scripts/test-phase14b-ffmpeg-loop.ts`). 5.0s video executed for 20.3s (596 frames, 3 full loops, speed 1.07x). Bound `StudioCanvas.tsx` video preview to `config.loop`, hardened claim de-duplication in `stateMachine.ts`, and verified zero orphaned FFmpeg processes.
 - **Phase 15 Production Deployment, Repository Integrity & Operational Hardening (2026-08-31T16:00Z)**: Pushed codebase to GitHub (`aryanoff/Mr-rajpoot-Studio-OBS`), audited repository integrity and secret exposure (0 leaked secrets), validated Docker & VPS deployment configs, and executed complete 30-point production verification suite (29 PASS, 1 DEFERRED).
 - **Phase 15A Admin-Only Manual Plan Grants & Authoritative Entitlements (2026-08-31T16:30Z)**: Implemented database table `public.billing_plan_grants`, audited manual plan overrides in `get_effective_entitlements`, created Admin UI command center with search/grant/revoke controls, verified 100% (30/30) automated test assertions AG01–AG30, and granted **Agency** plan ($149/mo reference tier) to `Aryan Singh Rajpoot (Mr Rajpoot Studio)` and `Crypto Live` without requiring Stripe payment.
+- **Phase 15B Admin UX / Information Architecture & Security Hardening (2026-08-31T17:00Z)**: Reorganized Admin Billing into 4 modular tabs (`Overview`, `Customers`, `Plans & Access`, `Billing Health`), implemented compact ($\le 80\text{vh}$) grant dialog with Agency default and 6-bullet value grid, created responsive slide-over `AdminCustomerDrawer`, added human-readable `AdminAccessTimeline` audit history, normalized all technical errors with friendly copy, verified 100% (30/30) automated test assertions AUX01–AUX30, and confirmed 0 lint errors, 0 TS errors, and passing Vite & worker production builds.
 
 ---
 
@@ -29,6 +30,7 @@
 
 | Domain / Area | Layer | Real Evidence in Current Session | Status Classification | Operational Notes |
 |---|---|---|---|---|
+| **Admin Panel UX & Architecture** | Admin / Full-Stack | 30/30 automated tests (`scripts/verify-phase15b-admin-ux.ts`), 4 modular tabs, responsive drawers | **`LOCAL-EXECUTED`** | Modern, human-first SaaS billing command center with audit trail and webhook replay. |
 | **Admin Manual Plan Grants** | Billing / Entitlements | 30/30 automated tests (`scripts/verify-admin-manual-plan-grants.ts`), active Agency grants in DB | **`LOCAL-EXECUTED`** | Direct authoritative entitlement overrides without Stripe payments. |
 | **Git & Repository Integrity** | DevOps / Security | `main` branch synced to GitHub, 0 secrets tracked, .gitignore hardened | **`LOCAL-EXECUTED`** | Repository provenance established cleanly. |
 | **Media Playback Looping Engine** | Streaming / Compositor | `scripts/test-phase14b-ffmpeg-loop.ts` (596 frames, 3 loops, 1.07x speed), 9/9 vitest tests | **`LOCAL-EXECUTED`** | Physically verified media repeating beyond source duration at 1.07x speed. |

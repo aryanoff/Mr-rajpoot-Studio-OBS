@@ -76,3 +76,28 @@ export interface AdminWebhookFilters {
   page?: number;
   limit?: number;
 }
+
+export interface AdminCustomerActivityItem {
+  id: string;
+  action: string;
+  admin_user_id: string | null;
+  target_id: string | null;
+  details: Record<string, any>;
+  created_at: string;
+}
+
+export interface AdminCustomerUsageSummary {
+  user_id: string;
+  storage_bytes: number;
+  max_storage_bytes: number | null;
+  file_count: number;
+  live_streams_count: number;
+  total_streams_count: number;
+  max_concurrent_streams: number | null;
+  scenes_count: number;
+  playlists_count: number;
+  schedules_count: number;
+  destinations_count: number;
+}
+
+export type AdminTabType = 'overview' | 'customers' | 'access' | 'health';

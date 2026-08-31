@@ -8,6 +8,9 @@ export const ADMIN_BILLING_KEYS = {
   subscriptions: (filters: AdminSubscriptionFilters) => ['admin', 'billing', 'subscriptions', filters],
   webhookEvents: (filters: AdminWebhookFilters) => ['admin', 'billing', 'webhooks', filters],
   revenueSnapshots: (days: number) => ['admin', 'billing', 'snapshots', days],
+  customerActivity: (userId?: string) => ['admin', 'billing', 'customer-activity', userId],
+  customerUsage: (userId?: string) => ['admin', 'billing', 'customer-usage', userId],
+  activeStreams: ['admin', 'billing', 'active-streams'],
 };
 
 export function useAdminBillingOverview() {
@@ -50,6 +53,32 @@ export function useAdminRevenueSnapshots(days = 30) {
   });
 }
 
+export function useAdminCustomerActivity(userId?: string) {
+  return useQuery({
+    queryKey: ADMIN_BILLING_KEYS.customerActivity(userId),
+    queryFn: () => (userId ? adminBillingService.getCustomerActivity(userId) : Promise.resolve([])),
+    enabled: !!userId,
+    staleTime: 15 * 1000,
+  });
+}
+
+export function useAdminCustomerUsage(userId?: string) {
+  return useQuery({
+    queryKey: ADMIN_BILLING_KEYS.customerUsage(userId),
+    queryFn: () => (userId ? adminBillingService.getCustomerUsage(userId) : null),
+    enabled: !!userId,
+    staleTime: 15 * 1000,
+  });
+}
+
+export function useAdminActiveStreamsCount() {
+  return useQuery({
+    queryKey: ADMIN_BILLING_KEYS.activeStreams,
+    queryFn: () => adminBillingService.getActiveStreamsCount(),
+    staleTime: 15 * 1000,
+  });
+}
+
 export function useAdminRetryWebhookMutation() {
   const queryClient = useQueryClient();
 
@@ -72,3 +101,4 @@ export function useAdminTakeSnapshotMutation() {
     },
   });
 }
+
