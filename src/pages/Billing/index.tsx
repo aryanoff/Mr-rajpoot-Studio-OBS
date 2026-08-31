@@ -189,14 +189,18 @@ export default function Billing() {
             </span>
             <Badge
               variant={
-                subscription?.status === 'active'
+                entitlements?.entitlement_source === 'admin_grant'
+                  ? 'success'
+                  : subscription?.status === 'active'
                   ? 'success'
                   : subscription?.status === 'past_due'
                   ? 'error'
                   : 'default'
               }
             >
-              {subscription?.status || 'Active'}
+              {entitlements?.entitlement_source === 'admin_grant'
+                ? 'Admin Granted'
+                : subscription?.status || 'Active'}
             </Badge>
           </div>
           <div className="flex items-baseline gap-2 mb-2">
@@ -205,7 +209,11 @@ export default function Billing() {
             </h3>
           </div>
           <p className="text-xs text-text-secondary mb-4">
-            {subscription?.cancel_at_period_end
+            {entitlements?.entitlement_source === 'admin_grant'
+              ? entitlements.grant_expires_at
+                ? `Complimentary access active until ${new Date(entitlements.grant_expires_at).toLocaleDateString()}`
+                : 'Complimentary administrator access granted (No renewal required)'
+              : subscription?.cancel_at_period_end
               ? `Cancels on ${new Date(subscription.current_period_end).toLocaleDateString()}`
               : subscription
               ? `Renews on ${new Date(subscription.current_period_end).toLocaleDateString()}`

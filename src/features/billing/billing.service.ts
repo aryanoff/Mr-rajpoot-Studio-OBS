@@ -8,6 +8,7 @@ import type {
   QuotaCheckResult,
   UsageHistoryPeriod,
   ReconciliationResult,
+  AdminUserPlanGrantItem,
 } from './billing.types';
 
 export const billingService = {
@@ -436,5 +437,66 @@ export const billingService = {
     }
 
     return response.json();
+  },
+
+  /**
+   * Admin: List users with their current plan, Stripe subscription, and active manual grants.
+   */
+  async adminListUserPlanGrants(search?: string, limit = 50, offset = 0): Promise<AdminUserPlanGrantItem[]> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('admin_list_user_plan_grants', {
+      p_search: search || undefined,
+      p_limit: limit,
+      p_offset: offset,
+    });
+
+    if (error) {
+      throw new Error(`Failed to list user plan grants: ${error.message}`);
+    }
+
+    return (data as AdminUserPlanGrantItem[]) || [];
+  },
+
+  /**
+   * Admin: Grant a plan (e.g. Agency) manually to a user without requiring Stripe payment.
+   */
+  async adminGrantPlan(params: {
+    userId: string;
+    planId: PlanCode;
+    reason?: string;
+    startsAt?: string;
+    expiresAt?: string | null;
+  }): Promise<string> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('admin_grant_plan', {
+      p_user_id: params.userId,
+      p_plan_id: params.planId,
+      p_reason: params.reason || 'Administrative plan grant',
+      p_starts_at: params.startsAt || new Date().toISOString(),
+      p_expires_at: params.expiresAt || undefined,
+    });
+
+    if (error) {
+      throw new Error(`Failed to grant plan: ${error.message}`);
+    }
+
+    return data as string;
+  },
+
+  /**
+   * Admin: Revoke an active manual plan grant.
+   */
+  async adminRevokePlanGrant(grantId: string, reason?: string): Promise<boolean> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('admin_revoke_plan_grant', {
+      p_grant_id: grantId,
+      p_reason: reason || 'Revoked by administrator',
+    });
+
+    if (error) {
+      throw new Error(`Failed to revoke plan grant: ${error.message}`);
+    }
+
+    return !!data;
   },
 };

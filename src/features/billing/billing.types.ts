@@ -58,6 +58,47 @@ export interface EffectiveEntitlements {
   max_stream_resolution: string | null;
   max_fps: number | null;
   advanced_analytics: boolean;
+  entitlement_source?: 'admin_grant' | 'stripe' | 'free';
+  grant_id?: string | null;
+  grant_expires_at?: string | null;
+  grant_reason?: string | null;
+}
+
+export interface BillingPlanGrant {
+  id: string;
+  user_id: string;
+  plan_id: PlanCode;
+  granted_by: string;
+  reason: string | null;
+  starts_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  revoked_by: string | null;
+  revocation_reason: string | null;
+  source: string;
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminUserPlanGrantItem {
+  user_id: string;
+  email: string | null;
+  full_name: string | null;
+  username: string | null;
+  role: string | null;
+  effective_plan_id: PlanCode;
+  effective_plan_name: string;
+  entitlement_source: 'admin_grant' | 'stripe' | 'free';
+  stripe_plan_id: PlanCode | null;
+  stripe_status: string | null;
+  grant_id: string | null;
+  grant_plan_id: PlanCode | null;
+  grant_reason: string | null;
+  grant_starts_at: string | null;
+  grant_expires_at: string | null;
+  grant_created_at: string | null;
+  grant_is_active: boolean;
 }
 
 export interface BillingUsage {

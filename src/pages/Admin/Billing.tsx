@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ShieldCheck,
   Sparkles,
+  Shield,
 } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
@@ -31,16 +32,28 @@ import {
   useAdminRetryWebhookMutation,
   useAdminTakeSnapshotMutation,
 } from '../../features/adminBilling/adminBilling.hooks';
+import {
+  useAdminUserPlanGrants,
+  useAdminRevokePlanGrantMutation,
+} from '../../features/billing/billing.hooks';
+import AdminGrantPlanModal from '../../components/admin/AdminGrantPlanModal';
 import { formatBytes } from '../../lib/utils';
 import type { AdminSubscription } from '../../features/adminBilling/adminBilling.types';
+import type { AdminUserPlanGrantItem } from '../../features/billing/billing.types';
 
 export default function AdminBilling() {
+  const [activeTab, setActiveTab] = useState<'overview' | 'grants' | 'subscriptions' | 'webhooks'>('overview');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [planFilter, setPlanFilter] = useState('');
   const [page, setPage] = useState(1);
   const [webhookStatusFilter, setWebhookStatusFilter] = useState('');
   const [selectedSub, setSelectedSub] = useState<AdminSubscription | null>(null);
+
+  // Manual Grant State
+  const [grantUserSearch, setGrantUserSearch] = useState('');
+  const [grantModalUser, setGrantModalUser] = useState<AdminUserPlanGrantItem | null>(null);
+  const [isGrantModalOpen, setIsGrantModalOpen] = useState(false);
 
   // Queries
   const { data: overview, isLoading: overviewLoading, refetch: refetchOverview } = useAdminBillingOverview();
@@ -59,6 +72,10 @@ export default function AdminBilling() {
   });
   const { refetch: refetchSnapshots } = useAdminRevenueSnapshots(30);
 
+  // User Plan Grants Query & Revoke Mutation
+  const { data: userGrants = [], isLoading: grantsLoading, refetch: refetchGrants } = useAdminUserPlanGrants(grantUserSearch);
+  const revokeGrantMutation = useAdminRevokePlanGrantMutation();
+
   // Mutations
   const retryMutation = useAdminRetryWebhookMutation();
   const takeSnapshotMutation = useAdminTakeSnapshotMutation();
@@ -69,6 +86,7 @@ export default function AdminBilling() {
     refetchSubs();
     refetchWebhooks();
     refetchSnapshots();
+    refetchGrants();
   };
 
   const formatCurrency = (cents: number) => {
@@ -123,6 +141,54 @@ export default function AdminBilling() {
             <span>Refresh</span>
           </Button>
         </div>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border/40 pb-2">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+            activeTab === 'overview'
+              ? 'bg-accent text-white shadow-glow'
+              : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
+          }`}
+        >
+          <Activity size={15} />
+          Overview & Economics
+        </button>
+        <button
+          onClick={() => setActiveTab('grants')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+            activeTab === 'grants'
+              ? 'bg-purple-600 text-white shadow-glow'
+              : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
+          }`}
+        >
+          <Shield size={15} />
+          User Plan Grants & Overrides
+        </button>
+        <button
+          onClick={() => setActiveTab('subscriptions')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+            activeTab === 'subscriptions'
+              ? 'bg-accent text-white shadow-glow'
+              : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
+          }`}
+        >
+          <Users size={15} />
+          Stripe Subscriptions
+        </button>
+        <button
+          onClick={() => setActiveTab('webhooks')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+            activeTab === 'webhooks'
+              ? 'bg-accent text-white shadow-glow'
+              : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
+          }`}
+        >
+          <RotateCcw size={15} />
+          Webhooks & Ingest
+        </button>
       </div>
 
       {/* Top KPI Cards */}
@@ -345,6 +411,211 @@ export default function AdminBilling() {
           </div>
         </Card>
       </div>
+
+      {/* User Plan Grants & Overrides Management Panel */}
+      {(activeTab === 'grants' || activeTab === 'overview') && (
+        <Card variant="glass" className="p-6 border-purple-500/30 shadow-glow">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div>
+              <h3 className="font-semibold text-text-primary text-lg flex items-center gap-2">
+                <Shield size={20} className="text-purple-400" />
+                Admin Manual Plan Grants & Overrides
+              </h3>
+              <p className="text-xs text-text-muted mt-0.5">
+                Assign Agency or customized plan access directly to creators without requiring Stripe payment.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="relative min-w-[260px]">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="text"
+                  placeholder="Search user email, name, ID..."
+                  value={grantUserSearch}
+                  onChange={(e) => setGrantUserSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-surface-2 border border-border/60 rounded-lg text-text-primary focus:outline-none focus:border-purple-500"
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchGrants()}
+                disabled={grantsLoading}
+                className="flex items-center gap-1.5 text-xs"
+              >
+                <RefreshCw size={13} className={grantsLoading ? 'animate-spin' : ''} />
+                Refresh
+              </Button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border text-text-muted font-medium uppercase tracking-wider">
+                  <th className="pb-3 pr-4">Creator / User</th>
+                  <th className="pb-3 px-4">Effective Plan</th>
+                  <th className="pb-3 px-4">Access Source</th>
+                  <th className="pb-3 px-4">Manual Grant Status</th>
+                  <th className="pb-3 px-4">Grant Expiration</th>
+                  <th className="pb-3 px-4">Stripe Sub</th>
+                  <th className="pb-3 pl-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {grantsLoading ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-text-muted">
+                      Loading user entitlements...
+                    </td>
+                  </tr>
+                ) : userGrants.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-text-muted">
+                      No matching user accounts found.
+                    </td>
+                  </tr>
+                ) : (
+                  userGrants.map((u) => {
+                    const isAgency = u.effective_plan_id === 'agency';
+                    const hasActiveGrant = u.grant_is_active;
+
+                    return (
+                      <tr key={u.user_id} className="hover:bg-surface-2/40 transition-colors">
+                        <td className="py-3.5 pr-4">
+                          <div className="font-medium text-text-primary flex items-center gap-1.5">
+                            <span>{u.full_name || u.username || 'Anonymous User'}</span>
+                            {u.role === 'admin' && (
+                              <Badge variant="scheduled" size="sm" className="text-[10px] py-0 px-1">
+                                Admin
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-text-muted truncate max-w-[200px]">
+                            {u.email || u.user_id}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <Badge
+                            variant={isAgency ? 'scheduled' : 'default'}
+                            size="sm"
+                            className="capitalize font-semibold"
+                          >
+                            {u.effective_plan_name}
+                          </Badge>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <Badge
+                            variant={
+                              u.entitlement_source === 'admin_grant'
+                                ? 'success'
+                                : 'default'
+                            }
+                            size="sm"
+                            className="capitalize"
+                          >
+                            {u.entitlement_source === 'admin_grant'
+                              ? 'Admin Grant'
+                              : u.entitlement_source === 'stripe'
+                              ? 'Stripe Paid'
+                              : 'Free Fallback'}
+                          </Badge>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          {hasActiveGrant ? (
+                            <span className="text-status-success font-medium flex items-center gap-1">
+                              <CheckCircle2 size={13} /> Active ({u.grant_plan_id?.toUpperCase()})
+                            </span>
+                          ) : (
+                            <span className="text-text-muted">None</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-text-secondary">
+                          {hasActiveGrant ? (
+                            u.grant_expires_at ? (
+                              new Date(u.grant_expires_at).toLocaleDateString()
+                            ) : (
+                              'Never (Indefinite)'
+                            )
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 font-mono text-[11px] text-text-muted">
+                          {u.stripe_plan_id ? `${u.stripe_plan_id.toUpperCase()} (${u.stripe_status})` : 'None'}
+                        </td>
+
+                        <td className="py-3.5 pl-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {hasActiveGrant ? (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setGrantModalUser(u);
+                                    setIsGrantModalOpen(true);
+                                  }}
+                                  className="text-xs text-purple-400 border-purple-500/40 hover:bg-purple-500/10"
+                                >
+                                  Modify Grant
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={revokeGrantMutation.isPending}
+                                  onClick={async () => {
+                                    if (
+                                      window.confirm(
+                                        `Revoke manual plan grant for ${u.full_name || u.email}? Effective access will return to ${
+                                          u.stripe_plan_id ? u.stripe_plan_id.toUpperCase() : 'Free'
+                                        }.`
+                                      )
+                                    ) {
+                                      if (u.grant_id) {
+                                        await revokeGrantMutation.mutateAsync({
+                                          grantId: u.grant_id,
+                                          userId: u.user_id,
+                                        });
+                                      }
+                                    }
+                                  }}
+                                  className="text-xs text-status-error hover:bg-status-error/10"
+                                >
+                                  Revoke
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => {
+                                  setGrantModalUser(u);
+                                  setIsGrantModalOpen(true);
+                                }}
+                                className="text-xs bg-purple-600 hover:bg-purple-500 text-white"
+                              >
+                                <Shield size={13} />
+                                Grant Agency
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Subscription Operations & Customer Search */}
       <Card variant="glass" className="p-6">
@@ -690,6 +961,19 @@ export default function AdminBilling() {
           </Card>
         </div>
       )}
+
+      {/* Admin Manual Grant Modal */}
+      <AdminGrantPlanModal
+        isOpen={isGrantModalOpen}
+        onClose={() => {
+          setIsGrantModalOpen(false);
+          setGrantModalUser(null);
+        }}
+        user={grantModalUser}
+        onSuccess={() => {
+          refetchGrants();
+        }}
+      />
     </div>
   );
 }

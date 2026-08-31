@@ -21,6 +21,7 @@
 - **Phase 13 Stream Execution Reliability & True Autonomous Broadcast Hardening (2026-08-31T15:12Z)**: Implemented `StreamSupervisor` in worker, decoupled 5 independent async worker loops (Heartbeat, Job Poll, Scheduler, Retention, Media Processing), protected against reaper timeouts with telemetry synchronization, injected remote storage HTTPS reconnect flags, and hardened browser independence.
 - **Phase 14B Real Media Loop Acceptance, EOF Hardening & UX Verification (2026-08-31T15:39Z)**: Verified physical media looping via local FFmpeg execution (`scripts/test-phase14b-ffmpeg-loop.ts`). 5.0s video executed for 20.3s (596 frames, 3 full loops, speed 1.07x). Bound `StudioCanvas.tsx` video preview to `config.loop`, hardened claim de-duplication in `stateMachine.ts`, and verified zero orphaned FFmpeg processes.
 - **Phase 15 Production Deployment, Repository Integrity & Operational Hardening (2026-08-31T16:00Z)**: Pushed codebase to GitHub (`aryanoff/Mr-rajpoot-Studio-OBS`), audited repository integrity and secret exposure (0 leaked secrets), validated Docker & VPS deployment configs, and executed complete 30-point production verification suite (29 PASS, 1 DEFERRED).
+- **Phase 15A Admin-Only Manual Plan Grants & Authoritative Entitlements (2026-08-31T16:30Z)**: Implemented database table `public.billing_plan_grants`, audited manual plan overrides in `get_effective_entitlements`, created Admin UI command center with search/grant/revoke controls, verified 100% (30/30) automated test assertions AG01–AG30, and granted **Agency** plan ($149/mo reference tier) to `Aryan Singh Rajpoot (Mr Rajpoot Studio)` and `Crypto Live` without requiring Stripe payment.
 
 ---
 
@@ -28,6 +29,7 @@
 
 | Domain / Area | Layer | Real Evidence in Current Session | Status Classification | Operational Notes |
 |---|---|---|---|---|
+| **Admin Manual Plan Grants** | Billing / Entitlements | 30/30 automated tests (`scripts/verify-admin-manual-plan-grants.ts`), active Agency grants in DB | **`LOCAL-EXECUTED`** | Direct authoritative entitlement overrides without Stripe payments. |
 | **Git & Repository Integrity** | DevOps / Security | `main` branch synced to GitHub, 0 secrets tracked, .gitignore hardened | **`LOCAL-EXECUTED`** | Repository provenance established cleanly. |
 | **Media Playback Looping Engine** | Streaming / Compositor | `scripts/test-phase14b-ffmpeg-loop.ts` (596 frames, 3 loops, 1.07x speed), 9/9 vitest tests | **`LOCAL-EXECUTED`** | Physically verified media repeating beyond source duration at 1.07x speed. |
 | **Stream Supervisor & Watchdog** | Reliability / Worker | `StreamSupervisor` class with stall detector (15s degraded, 30s reconnecting, 60s restart) | **`CODE-VERIFIED`** | Automatic exponential backoff recovery (2s, 5s, 10s, 30s, 60s). |

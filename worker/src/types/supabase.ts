@@ -79,6 +79,65 @@ export type Database = {
           },
         ]
       }
+      billing_plan_grants: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          granted_by: string
+          id: string
+          metadata: Json
+          plan_id: string
+          reason: string | null
+          revocation_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          source: string
+          starts_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          granted_by: string
+          id?: string
+          metadata?: Json
+          plan_id: string
+          reason?: string | null
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          source?: string
+          starts_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          granted_by?: string
+          id?: string
+          metadata?: Json
+          plan_id?: string
+          reason?: string | null
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          source?: string
+          starts_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_plan_grants_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "billing_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_plans: {
         Row: {
           advanced_analytics: boolean
@@ -1423,6 +1482,42 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_grant_plan: {
+        Args: {
+          p_expires_at?: string
+          p_plan_id: string
+          p_reason?: string
+          p_starts_at?: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      admin_list_user_plan_grants: {
+        Args: { p_limit?: number; p_offset?: number; p_search?: string }
+        Returns: {
+          effective_plan_id: string
+          effective_plan_name: string
+          email: string
+          entitlement_source: string
+          full_name: string
+          grant_created_at: string
+          grant_expires_at: string
+          grant_id: string
+          grant_is_active: boolean
+          grant_plan_id: string
+          grant_reason: string
+          grant_starts_at: string
+          role: string
+          stripe_plan_id: string
+          stripe_status: string
+          user_id: string
+          username: string
+        }[]
+      }
+      admin_revoke_plan_grant: {
+        Args: { p_grant_id: string; p_reason?: string }
+        Returns: boolean
+      }
       backfill_usage_history: { Args: { p_user_id: string }; Returns: Json }
       claim_media_cleanup: {
         Args: { p_batch_size?: number; p_worker_id: string }
@@ -1652,6 +1747,10 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: {
           advanced_analytics: boolean
+          entitlement_source: string
+          grant_expires_at: string
+          grant_id: string
+          grant_reason: string
           max_concurrent_streams: number
           max_destinations: number
           max_file_size_bytes: number

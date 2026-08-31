@@ -16,6 +16,7 @@ export const BILLING_QUERY_KEYS = {
     offset,
   ],
   reconciliation: (userId?: string) => ['billing', 'reconciliation', userId],
+  adminUserGrants: (search?: string) => ['billing', 'admin-user-grants', search],
 };
 
 export function useBillingPlans() {
@@ -107,3 +108,50 @@ export function usePortalMutation() {
     },
   });
 }
+
+export function useAdminUserPlanGrants(search?: string) {
+  return useQuery({
+    queryKey: BILLING_QUERY_KEYS.adminUserGrants(search),
+    queryFn: () => billingService.adminListUserPlanGrants(search),
+    staleTime: 10 * 1000,
+  });
+}
+
+export function useAdminGrantPlanMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (params: {
+      userId: string;
+      planId: PlanCode;
+      reason?: string;
+      startsAt?: string;
+      expiresAt?: string | null;
+    }) => billingService.adminGrantPlan(params),
+    onSuccess: (_, variables) => {
+      // Invalidate admin list and specifically affected user's billing/entitlements
+      queryClient.invalidateQueries({ queryKey: ['billing', 'admin-user-grants'] });
+      queryClient.invalidateQueries({ queryKey: BILLING_QUERY_KEYS.entitlements(variables.userId) });
+      queryClient.invalidateQueries({ queryKey: BILLING_QUERY_KEYS.subscription(variables.userId) });
+      queryClient.invalidateQueries({ queryKey: BILLING_QUERY_KEYS.usage(variables.userId) });
+    },
+  });
+}
+
+export function useAdminRevokePlanGrantMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (params: { grantId: string; userId?: string; reason?: string }) =>
+      billingService.adminRevokePlanGrant(params.grantId, params.reason),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['billing', 'admin-user-grants'] });
+      if (variables.userId) {
+        queryClient.invalidateQueries({ queryKey: BILLING_QUERY_KEYS.entitlements(variables.userId) });
+        queryClient.invalidateQueries({ queryKey: BILLING_QUERY_KEYS.subscription(variables.userId) });
+        queryClient.invalidateQueries({ queryKey: BILLING_QUERY_KEYS.usage(variables.userId) });
+      }
+    },
+  });
+}
+
