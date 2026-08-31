@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  worker:
+    build: .
+    image: mr-rajpoot-worker:phase5
+    container_name: mr-rajpoot-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      # VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY should be in .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
