@@ -51,12 +51,12 @@ scoop --version
    stripe listen --forward-to http://localhost:5173/api/billing/webhook
    ```
    The terminal will output:
-   `> Ready! Your webhook signing secret is whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+   `> Ready! Your webhook signing secret is whsec_YOUR_SIGNING_SECRET`
 
 3. **Locally Configure Secret**:
    Open `.env` in `c:\Users\Araya\Downloads\OBS 247\.env` and set:
    ```env
-   STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   STRIPE_WEBHOOK_SECRET=whsec_YOUR_SIGNING_SECRET
    ```
    *(Replace with your actual `whsec_` secret from Terminal 1. Do NOT commit or share this key).*
 

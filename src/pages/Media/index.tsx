@@ -19,6 +19,8 @@ import { useMediaAssets, useUploadMedia, useDeleteMedia } from "../../hooks/useM
 import type { MediaAsset } from "../../hooks/useMedia";
 import MediaPreview from "../../components/studio/MediaPreview";
 import MediaDetailsPanel from "../../components/media/MediaDetailsPanel";
+import { useEffectiveEntitlements, useBillingUsage } from "../../features/billing/billing.hooks";
+import { billingService } from "../../features/billing/billing.service";
 
 type MediaFilter = "all" | "video" | "image" | "audio" | "processing" | "ready" | "failed";
 type ViewMode = "grid" | "list";
@@ -34,6 +36,8 @@ export default function Media() {
   const { data: mediaAssets = [], isLoading: isFetching, error: fetchError } = useMediaAssets();
   const { mutate: uploadMedia, isPending: isUploading } = useUploadMedia();
   const { mutate: deleteMedia, isPending: isDeleting, variables: deletingId } = useDeleteMedia();
+  const { data: entitlements } = useEffectiveEntitlements();
+  const { data: usage } = useBillingUsage();
 
   const handleDelete = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -54,15 +58,22 @@ export default function Media() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check size limit (e.g., 50MB for test)
-    if (file.size > 50 * 1024 * 1024) {
-      setUploadErrorMsg("Storage limit reached. Max 50 MB per file allowed.");
+    // Entitlement & Quota check
+    if (entitlements && usage) {
+      const quotaCheck = billingService.canUploadFile(entitlements, usage, file.size);
+      if (!quotaCheck.allowed) {
+        setUploadErrorMsg(quotaCheck.reason || "Storage quota exceeded for your plan.");
+        return;
+      }
+    } else if (file.size > 500 * 1024 * 1024) {
+      // Fallback max file size cap (500MB)
+      setUploadErrorMsg("File exceeds maximum allowed upload size (500 MB).");
       return;
     }
     
     // Quick MIME check
     if (!file.type.startsWith("video/") && !file.type.startsWith("image/") && !file.type.startsWith("audio/")) {
-       setUploadErrorMsg("Unsupported file type.");
+       setUploadErrorMsg("Unsupported file type. Please upload a video, audio, or image file.");
        return;
     }
 

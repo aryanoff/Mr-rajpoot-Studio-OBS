@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Play, Clock, HardDrive, Settings, Trash2, Maximize, AlertTriangle, FileVideo, FileImage, FileAudio } from "lucide-react";
+import { X, Trash2, FileVideo, FileImage, FileAudio, Radio } from "lucide-react";
 import Button from "../ui/Button";
 import { useUpdateMedia } from "../../hooks/useMedia";
 import { getSupabase } from "../../lib/supabase";
+import { useNavigate } from "react-router-dom";
+import { useStudioStore } from "../../stores/studio.store";
+import { calculateMediaFit } from "../../features/studio/studio.constants";
 
 interface MediaAsset {
   id: string;
@@ -86,6 +89,7 @@ function MediaDetailsForm({ asset }: { asset: MediaAsset }) {
   }, [title, description, asset, updateMedia]);
 
   const formatSize = (bytes: number) => {
+    if (bytes === 0) return "0 B";
     const k = 1024;
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -93,89 +97,81 @@ function MediaDetailsForm({ asset }: { asset: MediaAsset }) {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-8">
+    <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
       {/* Save Status indicator */}
       <div className="text-xs text-text-muted">
         {saveState === "saving" && <span className="text-accent animate-pulse">Saving changes...</span>}
         {saveState === "saved" && <span className="text-status-success">All changes saved</span>}
-        {saveState === "error" && <span className="text-status-error">Save failed</span>}
-        {saveState === "idle" && "View and edit metadata"}
+        {saveState === "error" && <span className="text-status-error">Error saving changes</span>}
+      </div>
+
+      {/* Main Info */}
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs font-semibold text-text-muted uppercase tracking-wider block mb-1.5">Title</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            className="w-full bg-surface-2 border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:border-accent outline-none font-medium"
+            placeholder="Display title..."
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-text-muted uppercase tracking-wider block mb-1.5">Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => handleDescChange(e.target.value)}
+            rows={3}
+            className="w-full bg-surface-2 border border-border rounded-xl p-3 text-sm text-text-primary focus:border-accent outline-none resize-none font-normal"
+            placeholder="Add a description for this media asset..."
+          />
+        </div>
       </div>
 
       {/* Preview Section */}
-      <div className="rounded-2xl overflow-hidden bg-black aspect-video relative flex items-center justify-center border border-white/10 shadow-lg">
-        {previewUrl ? (
-          asset.file_type === 'video' ? (
-            <video src={previewUrl} controls className="w-full h-full object-contain" />
-          ) : asset.file_type === 'audio' ? (
-            <audio src={previewUrl} controls className="w-full" />
+      <div className="space-y-2">
+        <label className="text-xs font-semibold text-text-muted uppercase tracking-wider block">Preview</label>
+        <div className="rounded-xl overflow-hidden bg-black/40 border border-border relative aspect-video flex items-center justify-center">
+          {previewUrl ? (
+            asset.file_type === "video" ? (
+              <video src={previewUrl} controls className="w-full h-full object-contain" />
+            ) : asset.file_type === "image" ? (
+              <img src={previewUrl} alt={title} className="w-full h-full object-contain" />
+            ) : (
+              <audio src={previewUrl} controls className="w-3/4" />
+            )
           ) : (
-            <img src={previewUrl} className="w-full h-full object-contain" alt={title} />
-          )
-        ) : (
-          <div className="animate-pulse w-full h-full bg-surface-2 flex items-center justify-center text-text-muted text-sm">
-            Loading preview...
-          </div>
-        )}
-      </div>
-
-      {/* Editable Metadata */}
-      <div className="space-y-4">
-        <h4 className="text-sm font-bold text-text-secondary uppercase tracking-wider">Basic Information</h4>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-text-muted mb-1">Title</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => handleTitleChange(e.target.value)}
-              className="w-full bg-surface-2 border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
-              placeholder="Enter a title..."
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-text-muted mb-1">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => handleDescChange(e.target.value)}
-              className="w-full bg-surface-2 border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all h-24 resize-none"
-              placeholder="Enter a description..."
-            />
-          </div>
+            <div className="text-xs text-text-muted">Loading preview...</div>
+          )}
         </div>
       </div>
 
       {/* Technical Metadata */}
-      <div className="space-y-4">
-        <h4 className="text-sm font-bold text-text-secondary uppercase tracking-wider flex items-center gap-2">
-          <Settings size={14} />
-          Technical Metadata
-        </h4>
+      <div className="space-y-3">
+        <label className="text-xs font-semibold text-text-muted uppercase tracking-wider block">File Properties</label>
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-surface-2/50 border border-border/50 rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider flex items-center gap-1.5"><Clock size={12}/> Duration</span>
-            <span className="text-sm font-mono text-text-primary">{asset.duration_seconds ? `${asset.duration_seconds.toFixed(2)}s` : 'N/A'}</span>
+          <div className="bg-surface-2/60 p-3 rounded-xl border border-border/50 space-y-1">
+            <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider block">Size</span>
+            <span className="text-xs font-semibold text-text-primary block">{formatSize(asset.size_bytes)}</span>
           </div>
-          <div className="bg-surface-2/50 border border-border/50 rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider flex items-center gap-1.5"><Maximize size={12}/> Resolution</span>
-            <span className="text-sm font-mono text-text-primary">{(asset.width && asset.height) ? `${asset.width}x${asset.height}` : 'N/A'}</span>
+          <div className="bg-surface-2/60 p-3 rounded-xl border border-border/50 space-y-1">
+            <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider block">Format</span>
+            <span className="text-xs font-semibold text-text-primary uppercase block">{asset.mime_type?.split("/")[1] || asset.file_type}</span>
           </div>
-          <div className="bg-surface-2/50 border border-border/50 rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider flex items-center gap-1.5"><HardDrive size={12}/> File Size</span>
-            <span className="text-sm font-mono text-text-primary">{formatSize(asset.size_bytes)}</span>
-          </div>
-          <div className="bg-surface-2/50 border border-border/50 rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider flex items-center gap-1.5"><Play size={12}/> Codecs</span>
-            <span className="text-xs font-mono text-text-primary truncate" title={asset.video_codec || asset.audio_codec || 'N/A'}>
-              {asset.video_codec || asset.audio_codec || 'N/A'}
-            </span>
-          </div>
-        </div>
-        <div className="text-xs text-text-muted space-y-1 pt-2 border-t border-border/50">
-           <p><span className="font-semibold text-text-secondary">Filename:</span> {asset.filename}</p>
-           <p><span className="font-semibold text-text-secondary">MIME Type:</span> {asset.mime_type || 'Unknown'}</p>
-           <p><span className="font-semibold text-text-secondary">Uploaded:</span> {new Date(asset.created_at).toLocaleString()}</p>
-           <p><span className="font-semibold text-text-secondary">Bitrate:</span> {asset.bitrate ? `${Math.round(asset.bitrate / 1000)} kbps` : 'N/A'}</p>
+          {asset.duration_seconds && (
+            <div className="bg-surface-2/60 p-3 rounded-xl border border-border/50 space-y-1">
+              <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider block">Duration</span>
+              <span className="text-xs font-semibold text-text-primary block">{Math.round(asset.duration_seconds)}s</span>
+            </div>
+          )}
+          {asset.width && asset.height && (
+            <div className="bg-surface-2/60 p-3 rounded-xl border border-border/50 space-y-1">
+              <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider block">Dimensions</span>
+              <span className="text-xs font-semibold text-text-primary block">{asset.width} &times; {asset.height}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -183,7 +179,48 @@ function MediaDetailsForm({ asset }: { asset: MediaAsset }) {
 }
 
 export default function MediaDetailsPanel({ asset, onClose, onDelete, isDeleting }: MediaDetailsPanelProps) {
+  const navigate = useNavigate();
   if (!asset) return null;
+
+  const handleAddToStudio = () => {
+    const store = useStudioStore.getState();
+    const cw = store.sceneWidth;
+    const ch = store.sceneHeight;
+    const w = asset.width || (asset.file_type === 'video' ? 1920 : 800);
+    const h = asset.height || (asset.file_type === 'video' ? 1080 : 600);
+    const fit = asset.file_type === 'audio' 
+      ? { x: 0, y: 0, width: 0, height: 0 } 
+      : calculateMediaFit(w, h, cw, ch, "contain");
+
+    store.addSource({
+      id: crypto.randomUUID(),
+      scene_id: store.sceneId || 'temp',
+      type: asset.file_type,
+      media_id: asset.id,
+      name: asset.title || asset.filename,
+      x: fit.x,
+      y: fit.y,
+      width: fit.width,
+      height: fit.height,
+      rotation: 0,
+      opacity: 1,
+      z_index: store.sources.length,
+      visible: true,
+      locked: false,
+      config: {
+        fitMode: 'contain',
+        originalWidth: w,
+        originalHeight: h,
+        filePath: asset.file_path,
+        ...(asset.file_type === 'video' || asset.file_type === 'audio' ? { volume: 1, loop: true, muted: false } : {})
+      },
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as any);
+
+    onClose();
+    navigate('/studio');
+  };
 
   const getIcon = () => {
     if (asset.file_type === "video") return <FileVideo size={24} className="text-accent-light" />;
@@ -217,24 +254,26 @@ export default function MediaDetailsPanel({ asset, onClose, onDelete, isDeleting
         <MediaDetailsForm key={asset.id} asset={asset} />
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-border bg-surface flex items-center justify-between">
-          <div className="flex items-center gap-2">
-             {asset.deletion_status !== 'active' && (
-                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-status-warning bg-status-warning/10 px-2 py-1 rounded">
-                  <AlertTriangle size={12} />
-                  Pending Deletion
-                </div>
-             )}
-          </div>
+        <div className="p-4 border-t border-border bg-surface flex items-center justify-between gap-3">
           <Button 
             variant="ghost" 
             size="sm"
             onClick={() => onDelete(asset.id)}
             disabled={isDeleting || asset.deletion_status !== 'active'}
-            className="text-status-error hover:bg-status-error/10"
+            className="text-status-error hover:bg-status-error/10 text-xs"
           >
-            <Trash2 size={16} className={isDeleting ? "animate-pulse" : ""} />
-            {isDeleting ? "Deleting..." : "Delete Media"}
+            <Trash2 size={15} className={isDeleting ? "animate-pulse mr-1" : "mr-1"} />
+            {isDeleting ? "Deleting..." : "Delete"}
+          </Button>
+
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleAddToStudio}
+            className="text-xs px-4 font-semibold shadow-sm"
+          >
+            <Radio size={15} className="mr-1.5" />
+            Add to Studio Scene
           </Button>
         </div>
       </motion.div>

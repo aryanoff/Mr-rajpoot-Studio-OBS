@@ -397,10 +397,19 @@ export const billingService = {
    * Initiates Stripe Checkout session by calling the backend API.
    */
   async createCheckoutSession(planId: PlanCode): Promise<{ url: string; sessionId: string }> {
+    const supabase = getSupabase();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+
+    if (!token) {
+      throw new Error('You must be logged in to start checkout.');
+    }
+
     const response = await fetch('/api/billing/create-checkout-session', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({
         planId,
@@ -421,10 +430,19 @@ export const billingService = {
    * Initiates Stripe Customer Portal session by calling the backend API.
    */
   async createCustomerPortalSession(): Promise<{ url: string }> {
+    const supabase = getSupabase();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+
+    if (!token) {
+      throw new Error('You must be logged in to access billing.');
+    }
+
     const response = await fetch('/api/billing/create-portal-session', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({
         returnUrl: `${window.location.origin}/billing`,

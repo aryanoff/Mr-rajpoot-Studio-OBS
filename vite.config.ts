@@ -52,7 +52,8 @@ function billingApiPlugin() {
           res.statusCode = 404;
           res.end(JSON.stringify({ error: 'Endpoint not found' }));
         } catch (err: any) {
-          res.statusCode = 400;
+          const isUnauthorized = typeof err.message === 'string' && err.message.startsWith('Unauthorized');
+          res.statusCode = isUnauthorized ? 401 : 400;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ message: err.message || 'Internal Server Error' }));
         }

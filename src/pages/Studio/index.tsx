@@ -248,22 +248,23 @@ export default function Studio() {
             size="sm"
           >
             {isLive 
-              ? (activeStream?.stream_analytics?.[0]?.avg_bitrate_kbps && activeStream.stream_analytics[0].avg_bitrate_kbps < 800 ? "LIVE — LOW BITRATE" : "● LIVE") 
-              : activeStream?.status === "reconnecting" ? "↻ RECONNECTING..." 
-              : isStarting ? "STARTING..." 
-              : isStopping ? "STOPPING..." 
-              : "OFFLINE"}
+              ? (activeStream?.stream_analytics?.[0]?.avg_bitrate_kbps && activeStream.stream_analytics[0].avg_bitrate_kbps < 800 ? "● LIVE — WEAK CONNECTION" : "● LIVE") 
+              : activeStream?.status === "reconnecting" ? "↻ Reconnecting..." 
+              : activeStream?.status === "queued" ? "Preparing..."
+              : isStarting ? "Starting..." 
+              : isStopping ? "Ending Broadcast..." 
+              : "Offline"}
           </Badge>
 
           {/* Live Telemetry Info */}
           {isLive && activeStream?.stream_analytics?.[0] && (
-            <span className="hidden md:inline-flex items-center gap-2 text-xs font-mono text-text-secondary bg-surface-2 px-2 py-0.5 rounded border border-border">
-              <span className={activeStream.stream_analytics[0].avg_bitrate_kbps < 800 ? "text-amber-400 font-semibold" : "text-emerald-400"}>
+            <span className="hidden md:inline-flex items-center gap-2 text-xs font-mono text-text-secondary bg-surface-2 px-2.5 py-0.5 rounded-lg border border-border">
+              <span className={activeStream.stream_analytics[0].avg_bitrate_kbps < 800 ? "text-amber-400 font-semibold" : "text-emerald-400 font-semibold"}>
                 {(activeStream.stream_analytics[0].avg_bitrate_kbps / 1000).toFixed(1)} Mbps
               </span>
-              <span>&bull;</span>
+              <span className="text-text-muted">&bull;</span>
               <span>30 FPS</span>
-              <span>&bull;</span>
+              <span className="text-text-muted">&bull;</span>
               <span>{new Date((activeStream.stream_analytics[0].uptime_seconds || 0) * 1000).toISOString().substring(11, 19)}</span>
             </span>
           )}
@@ -335,7 +336,7 @@ export default function Studio() {
           
           {/* Left Panel: Scenes & Sources */}
           {!isLeftPanelCollapsed ? (
-            <div className="w-64 flex flex-col border-r border-border shrink-0 bg-surface-1 z-10 transition-all">
+            <div className="w-56 lg:w-64 flex flex-col border-r border-border shrink-0 bg-surface-1 z-10 transition-all">
               <SceneList />
               <SourceList 
                 onAddMedia={(type) => {
@@ -359,7 +360,7 @@ export default function Studio() {
           )}
 
           {/* Center Panel: Dominant Canvas */}
-          <div className="flex-1 min-w-0 bg-background p-3 relative overflow-hidden flex flex-col">
+          <div className="flex-1 min-w-0 bg-background p-2.5 sm:p-3 relative overflow-hidden flex flex-col">
             {/* Quick Panel Toggle Overlay */}
             <div className="absolute top-4 left-4 z-10 flex gap-2">
               <button
@@ -388,7 +389,7 @@ export default function Studio() {
 
           {/* Right Panel: Contextual Inspector */}
           {!isRightPanelCollapsed ? (
-            <div className="w-72 shrink-0 bg-surface-1 border-l border-border z-10 transition-all">
+            <div className="w-60 lg:w-72 shrink-0 bg-surface-1 border-l border-border z-10 transition-all">
               <Inspector />
             </div>
           ) : (

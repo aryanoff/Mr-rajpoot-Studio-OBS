@@ -15,6 +15,7 @@ import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import QuotaWidget from "../../components/dashboard/QuotaWidget";
 import { useProfile } from "../../features/auth/auth.hooks";
+import { useAuthStore } from "../../stores/auth.store";
 import { NavLink } from "react-router-dom";
 import { useStreams, useSchedules } from "../../features/streams/streams.hooks";
 import { useWorkers } from "../../features/admin/admin.hooks";
@@ -40,6 +41,7 @@ const QuickActionCard = ({ title, icon: Icon, to, desc }: { title: string, icon:
 );
 
 export default function Dashboard() {
+  const user = useAuthStore((state) => state.user);
   const { data: profile } = useProfile();
   const { data: streams, isLoading: isStreamsLoading } = useStreams();
   const { data: schedules, isLoading: isSchedulesLoading } = useSchedules();
@@ -48,6 +50,8 @@ export default function Dashboard() {
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
+
+  const displayName = profile?.fullName || profile?.username || user?.email?.split('@')[0] || "Creator";
 
   const liveStreams = streams?.filter(s => s.status === "live") || [];
   const recentStreams = streams?.filter(s => s.status !== "live" && s.status !== "queued").sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5) || [];
@@ -66,7 +70,7 @@ export default function Dashboard() {
       <motion.div {...fadeInUp} className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-text-primary mb-1">
-            {greeting}, {profile?.fullName?.split(" ")[0] || "Creator"}
+            {greeting}, {displayName}
           </h1>
           <div className="flex items-center gap-3 text-sm text-text-secondary">
             <span className="flex items-center gap-1.5 font-medium">

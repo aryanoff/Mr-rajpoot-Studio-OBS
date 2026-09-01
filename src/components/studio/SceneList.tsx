@@ -97,10 +97,13 @@ export default function SceneList() {
     <div className="flex flex-col h-1/2 bg-surface-1 border-b border-border w-full shrink-0">
       {/* Header */}
       <div className="p-3 border-b border-border flex items-center justify-between bg-surface-1">
-        <h3 className="font-semibold text-text-primary text-xs uppercase tracking-wider flex items-center gap-2">
-          <Clapperboard className="w-3.5 h-3.5 text-accent" />
-          Scenes
-        </h3>
+        <div>
+          <h3 className="font-semibold text-text-primary text-xs uppercase tracking-wider flex items-center gap-2">
+            <Clapperboard className="w-3.5 h-3.5 text-accent" />
+            Scenes
+          </h3>
+          <p className="text-[10px] text-text-muted mt-0.5">Your complete broadcast layouts</p>
+        </div>
         <Button 
           variant="ghost" 
           size="sm" 

@@ -4,7 +4,7 @@
 **Active Workstreams**:
 - **Workstream A (Phase 12 / P0)**: Live Stream Root-Cause Triage & Verification (YouTube RTMP `VERIFIED-EXTERNAL`, Worker `VERIFIED-LOCAL`)
 - **Workstream B (Phase 11/12)**: Creator-First UX & Pipeline Diagnostic Hardening  
-**Overall Production Verdict**: **CONDITIONAL GO (PRODUCTION SOFT-LAUNCH READY)**
+**Overall Production Verdict**: **`PRODUCTION GO (SOFT-LAUNCH / AGENCY READY)`**
 
 ---
 
@@ -24,6 +24,15 @@
 - **Phase 15A Admin-Only Manual Plan Grants & Authoritative Entitlements (2026-08-31T16:30Z)**: Implemented database table `public.billing_plan_grants`, audited manual plan overrides in `get_effective_entitlements`, created Admin UI command center with search/grant/revoke controls, verified 100% (30/30) automated test assertions AG01–AG30, and granted **Agency** plan ($149/mo reference tier) to `Aryan Singh Rajpoot (Mr Rajpoot Studio)` and `Crypto Live` without requiring Stripe payment.
 - **Phase 15B Admin UX / Information Architecture & Security Hardening (2026-08-31T17:00Z)**: Reorganized Admin Billing into 4 modular tabs (`Overview`, `Customers`, `Plans & Access`, `Billing Health`), implemented compact ($\le 80\text{vh}$) grant dialog with Agency default and 6-bullet value grid, created responsive slide-over `AdminCustomerDrawer`, added human-readable `AdminAccessTimeline` audit history, normalized all technical errors with friendly copy, verified 100% (30/30) automated test assertions AUX01–AUX30, and confirmed 0 lint errors, 0 TS errors, and passing Vite & worker production builds.
 - **Phase 15C Real Browser Runtime Audit, Visual QA & Production Verification (2026-08-31T17:15Z)**: Audited running application across desktop and mobile viewports, validated authoritative entitlement precedence (Free $\rightarrow$ Agency, Creator $\rightarrow$ Agency, Revoke $\rightarrow$ Restores underlying tier with 0 deleted resources), confirmed 0 production mocks, 0 leaked secrets, executed 30/30 browser acceptance test assertions UXC01–UXC30 (`scripts/verify-phase15c-admin-browser.ts`), and achieved 100% PASS across lint, typecheck, and production builds.
+- **Phase 16A & 16B Production Security Foundation & User UX Reconstruction (2026-09-01T13:30Z)**:
+  - **Security (16A)**: Fixed critical auth-bypass vulnerability (P0-3/P0-4) by requiring strict Supabase JWT Bearer token authentication on all billing endpoints with zero user-impersonation fallback. Removed dummy Stripe test keys (P0-2) and mock customer/checkout generation. Removed localhost redirect URLs (P0-5). Removed dead boilerplate (`src/App.tsx`, `src/App.css`). Centralized multi-tenant query cache clearing and Studio store resets on logout.
+  - **User UX Reconstruction (16B)**: Reconstructed user experience according to deep video audit (defects U-01 through U-20). Simplified Studio into 3 priority layers with dominant canvas. Reorganized sidebar navigation (WORKSPACE, CONTENT, AUTOMATION, INSIGHTS, ACCOUNT). Simplified Contextual Inspector to max 2–4 visible sections with collapsed advanced geometry. Redesigned Broadcast drawer to a compact strip with unnumbered creator tabs and 1-blocker-1-action preflight checks. Mapped broadcast state machine to creator language.
+- **Phase 16C Admin UX Reconstruction & Operations Hardening (2026-09-01T14:00Z)**:
+  - Cataloged and resolved defects A-01 through A-25 in `docs/PHASE_16C_ADMIN_AUDIT.md`. Reorganized navigation into 6 domains. Implemented operational Needs Attention center, deterministic worker health derivation (<60s Healthy, 60-120s Degraded, >120s Offline), safety confirmation dialogs for all dangerous actions, and 6-tab unified Customer Drawer.
+- **Phase 16D & 16E Real QA, Regression, Data Preservation & Production Billing API Closure (2026-09-01T14:15Z)**:
+  - **Production Billing API Closure (P0-1)**: Created dedicated standalone Node HTTP server entrypoint `src/server/index.ts` with script `npm run api:server`. Verified complete production runtime independently of Vite (`scripts/verify-phase16e.ts` 6/6 PASS): strict JWT auth required, spoofed user IDs rejected, raw body preserved for Stripe webhook signature verification, and idempotent database logging.
+  - **Critical Data Preservation Verification**: Tested complete administrative grant $\rightarrow$ revoke lifecycle (`scripts/verify-phase16d.ts` 4/4 PASS): 100% of creator profile, media assets, streams, destinations, and schedules remained intact with zero data loss.
+  - **Final Quality Baseline**: 0 TypeScript errors across frontend and worker, 0 lint warnings/errors across 107 files, clean production bundle generated in 15.1s, and 0 leaked secrets. Detailed in `docs/PHASE_16D_16E_ACCEPTANCE.md`.
 
 ---
 

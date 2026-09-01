@@ -14,6 +14,9 @@ import {
   X,
   ListMusic,
   CreditCard,
+  Users,
+  Activity,
+  ScrollText,
 } from "lucide-react";
 import { useUIStore } from "../../stores/ui.store";
 import { cn } from "../../lib/utils";
@@ -33,7 +36,6 @@ const appNavGroups: NavGroup[] = [
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { label: "Live Studio", href: "/studio", icon: Radio },
-      { label: "Streams", href: "/streams", icon: Film },
     ],
   },
   {
@@ -52,30 +54,58 @@ const appNavGroups: NavGroup[] = [
   {
     title: "INSIGHTS",
     items: [
+      { label: "Streams", href: "/streams", icon: Film },
       { label: "Analytics", href: "/analytics", icon: BarChart3 },
     ],
   },
   {
-    title: "SYSTEM",
+    title: "ACCOUNT",
     items: [
-      { label: "Billing & Plans", href: "/billing", icon: CreditCard },
       { label: "Settings", href: "/settings", icon: Settings },
+      { label: "Billing & Plans", href: "/billing", icon: CreditCard },
     ],
   },
 ];
 
 const adminNavGroups: NavGroup[] = [
   {
-    title: "ADMIN CONSOLE",
+    title: "COMMAND CENTER",
     items: [
       { label: "Overview", href: "/admin", icon: LayoutDashboard },
-      { label: "Billing & Revenue", href: "/admin/billing", icon: CreditCard },
-      { label: "Users", href: "/admin/users", icon: LayoutDashboard },
-      { label: "Streams", href: "/admin/streams", icon: Film },
-      { label: "Workers", href: "/admin/workers", icon: Zap },
+    ],
+  },
+  {
+    title: "CUSTOMERS",
+    items: [
+      { label: "Users & Roles", href: "/admin/users", icon: Users },
+      { label: "Subscriptions", href: "/admin/billing?tab=customers", icon: CreditCard },
+    ],
+  },
+  {
+    title: "BROADCAST OPERATIONS",
+    items: [
+      { label: "Live Streams", href: "/admin/streams", icon: Radio },
+      { label: "Worker Fleet", href: "/admin/workers", icon: Zap },
       { label: "Schedules", href: "/admin/schedules", icon: Calendar },
-      { label: "Media", href: "/admin/media", icon: FolderOpen },
-      { label: "System Logs", href: "/admin/logs", icon: BarChart3 },
+    ],
+  },
+  {
+    title: "CONTENT",
+    items: [
+      { label: "Media Library", href: "/admin/media", icon: FolderOpen },
+    ],
+  },
+  {
+    title: "BILLING",
+    items: [
+      { label: "Revenue & Plans", href: "/admin/billing", icon: BarChart3 },
+      { label: "Billing Health", href: "/admin/billing?tab=health", icon: Activity },
+    ],
+  },
+  {
+    title: "SYSTEM",
+    items: [
+      { label: "System Logs", href: "/admin/logs", icon: ScrollText },
       { label: "Settings", href: "/admin/settings", icon: Settings },
     ],
   },
@@ -166,8 +196,8 @@ export default function Sidebar({ variant = "app" }: SidebarProps) {
       <div className="p-3 border-t border-border mt-auto flex flex-col gap-2">
         <button
           onClick={async () => {
-            const { AuthService } = await import("../../features/auth/auth.service");
-            await AuthService.signOut();
+            const { useAuthStore } = await import("../../stores/auth.store");
+            await useAuthStore.getState().logout();
           }}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-status-error hover:bg-status-error-bg hover:text-status-error transition-colors text-xs cursor-pointer font-medium"
           title={sidebarCollapsed ? "Log out" : undefined}

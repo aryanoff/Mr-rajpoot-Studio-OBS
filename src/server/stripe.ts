@@ -42,7 +42,10 @@ export function getPlanFromStripePrice(priceId: string): PlanId | null {
 let stripeClientInstance: Stripe | null = null;
 
 export function getStripeClient(apiKey?: string): Stripe {
-  const key = apiKey || process.env.STRIPE_SECRET_KEY || 'sk_test_dummy_key_for_development';
+  const key = apiKey || process.env.STRIPE_SECRET_KEY;
+  if (!key) {
+    throw new Error('STRIPE_SECRET_KEY is not configured in the environment.');
+  }
   if (!stripeClientInstance || (apiKey && apiKey !== process.env.STRIPE_SECRET_KEY)) {
     stripeClientInstance = new Stripe(key, {
       apiVersion: '2025-02-24.acacia' as any,
@@ -91,14 +94,7 @@ export async function getOrCreateStripeCustomer(
       },
     });
   } catch (stripeErr: any) {
-    // If running in mocked / offline test mode without network
-    if (stripeErr.message?.includes('dummy') || !process.env.STRIPE_SECRET_KEY) {
-      stripeCustomer = {
-        id: `cus_sim_${Date.now()}_${userId.slice(0, 8)}`,
-      } as any;
-    } else {
-      throw new Error(`Stripe customer creation failed: ${stripeErr.message}`);
-    }
+    throw new Error(`Stripe customer creation failed: ${stripeErr.message}`);
   }
 
   // 3. Save mapping in database with idempotency handling
@@ -207,14 +203,6 @@ export async function createCheckoutSession(
       url: session.url || successUrl,
     };
   } catch (err: any) {
-    // Offline simulation fallback for testing environments
-    if (!process.env.STRIPE_SECRET_KEY) {
-      const mockSessionId = `cs_test_${Date.now()}_${planId}`;
-      return {
-        sessionId: mockSessionId,
-        url: `${successUrl}?session_id=${mockSessionId}&plan=${planId}`,
-      };
-    }
     throw new Error(`Stripe checkout session creation failed: ${err.message}`);
   }
 }
@@ -249,9 +237,6 @@ export async function createCustomerPortalSession(
 
     return { url: session.url };
   } catch (err: any) {
-    if (!process.env.STRIPE_SECRET_KEY) {
-      return { url: `${returnUrl}?portal_simulated=true` };
-    }
     throw new Error(`Stripe billing portal session creation failed: ${err.message}`);
   }
 }
@@ -265,7 +250,9 @@ export async function processStripeWebhookEvent(
 ): Promise<{ success: boolean; duplicate?: boolean; error?: string }> {
   const eventId = event.id;
   const eventType = event.type;
-  const eventCreatedAt = new Date(event.created * 1000).toISOString();
+  const eventCreatedAt = event.created
+    ? new Date(event.created * 1000).toISOString()
+    : new Date().toISOString();
 
   // 1. Idempotency Check in billing_webhook_events
   const { data: existingEvent } = await supabaseAdmin
@@ -349,8 +336,12 @@ export async function processStripeWebhookEvent(
         };
         const mappedStatus = statusMap[sub.status] || 'active';
 
-        const periodStart = new Date((sub as any).current_period_start * 1000).toISOString();
-        const periodEnd = new Date((sub as any).current_period_end * 1000).toISOString();
+        const periodStart = (sub as any).current_period_start
+          ? new Date((sub as any).current_period_start * 1000).toISOString()
+          : new Date().toISOString();
+        const periodEnd = (sub as any).current_period_end
+          ? new Date((sub as any).current_period_end * 1000).toISOString()
+          : new Date(Date.now() + 30 * 86400000).toISOString();
         const cancelAtPeriodEnd = sub.cancel_at_period_end || false;
         const canceledAt = sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : null;
 

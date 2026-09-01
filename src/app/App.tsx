@@ -1,18 +1,10 @@
 import { useEffect } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import AppRouter from "./router";
 import { useUIStore } from "../stores/ui.store";
 import { useAuthStore } from "../stores/auth.store";
 import { isSupabaseConfigured } from "../lib/supabase";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+import { queryClient } from "../lib/queryClient";
 
 export default function App() {
   const initThemeListener = useUIStore((state) => state.initThemeListener);

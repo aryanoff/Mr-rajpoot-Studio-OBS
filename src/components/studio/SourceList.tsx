@@ -37,10 +37,13 @@ export default function SourceList({ onAddMedia, onAddText, onAddOverlay }: Sour
     <div className="flex flex-col h-1/2 bg-surface-1 w-full shrink-0">
       {/* Header */}
       <div className="p-3 border-b border-border flex items-center justify-between bg-surface-1">
-        <h3 className="font-semibold text-text-primary text-xs uppercase tracking-wider flex items-center gap-2">
-          <Layers className="w-3.5 h-3.5 text-accent" />
-          Sources ({sources.length})
-        </h3>
+        <div>
+          <h3 className="font-semibold text-text-primary text-xs uppercase tracking-wider flex items-center gap-2">
+            <Layers className="w-3.5 h-3.5 text-accent" />
+            Sources ({sources.length})
+          </h3>
+          <p className="text-[10px] text-text-muted mt-0.5">Media & layers in this scene</p>
+        </div>
         
         <div className="relative">
           <Button 
@@ -96,17 +99,17 @@ export default function SourceList({ onAddMedia, onAddText, onAddOverlay }: Sour
       {/* Sources List */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
         {sortedSources.length === 0 ? (
-          <div className="text-center py-6 text-text-muted text-xs space-y-2">
-            <p>Your scene is empty</p>
-            <div className="flex flex-wrap gap-1.5 justify-center px-2">
-              <Button variant="secondary" size="sm" onClick={() => onAddMedia('video')}>
-                <Monitor className="w-3 h-3 mr-1" /> Video
+          <div className="text-center py-5 px-3 text-xs space-y-2.5 bg-surface-2/40 rounded-xl border border-dashed border-border/70 my-1">
+            <div>
+              <p className="font-semibold text-text-primary">Build your broadcast</p>
+              <p className="text-[11px] text-text-muted mt-0.5">Add a video or image to start your scene</p>
+            </div>
+            <div className="flex flex-col gap-1.5 pt-1">
+              <Button variant="primary" size="sm" onClick={() => onAddMedia('video')} className="w-full justify-center">
+                <Monitor className="w-3.5 h-3.5 mr-1.5" /> Add Video
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => onAddMedia('image')}>
-                <ImageIcon className="w-3 h-3 mr-1" /> Image
-              </Button>
-              <Button variant="secondary" size="sm" onClick={onAddText}>
-                <Type className="w-3 h-3 mr-1" /> Text
+              <Button variant="secondary" size="sm" onClick={() => onAddMedia('image')} className="w-full justify-center">
+                <ImageIcon className="w-3.5 h-3.5 mr-1.5" /> Add Image
               </Button>
             </div>
           </div>

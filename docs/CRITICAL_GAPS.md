@@ -11,6 +11,8 @@
    - Real encoder push confirmed with live YouTube handshake (`rtmp://a.rtmp.youtube.com/live2/***`), real database telemetry (`avg_bitrate_kbps: 2009`, `uptime_seconds: 490+`), and sustained soak.
 2. **Phase 13 Stream Execution Reliability & Autonomy**: `CODE-VERIFIED`
    - Dedicated `StreamSupervisor` with watchdog, stall detector, exponential backoff, decoupled worker loops, and remote storage HTTPS reconnect flags.
+3. **P0-1 Billing API Production Relocation & Standalone Runtime**: `LOCAL-RUNTIME` / `CLOSED`
+   - Dedicated standalone Node HTTP server entrypoint `src/server/index.ts` created, decoupled from Vite dev middleware. Verified via `scripts/verify-phase16e.ts` (100% pass): health checks, Bearer JWT validation (401 on missing/invalid), cross-user exploit protection, and raw-body Stripe webhook signature and idempotency handling.
 
 ---
 

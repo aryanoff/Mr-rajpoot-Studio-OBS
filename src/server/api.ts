@@ -10,11 +10,11 @@ import {
 import type Stripe from 'stripe';
 
 function getAdminClient(): SupabaseClient<Database> {
-  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
   if (!url || !serviceKey) {
-    throw new Error('Missing Supabase Service Key for server billing API.');
+    throw new Error('Missing Supabase URL or Service Role Key for server billing API.');
   }
 
   return createClient<Database>(url, serviceKey, {
@@ -24,21 +24,22 @@ function getAdminClient(): SupabaseClient<Database> {
 
 /**
  * Extracts and verifies the authenticated user from the Authorization header Bearer token.
+ * 
+ * SECURITY: No fallback. Missing or invalid token = 401. Never impersonates another user.
  */
 export async function authenticateRequestUser(
   supabaseAdmin: SupabaseClient<Database>,
   authHeader?: string
 ): Promise<string> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    // If running in development / test without token, try getting first active user
-    const { data: users } = await supabaseAdmin.auth.admin.listUsers();
-    if (users?.users?.[0]?.id) {
-      return users.users[0].id;
-    }
     throw new Error('Unauthorized: Missing or invalid authentication token.');
   }
 
   const token = authHeader.replace('Bearer ', '').trim();
+  if (!token) {
+    throw new Error('Unauthorized: Empty authentication token.');
+  }
+
   const { data: userData, error } = await supabaseAdmin.auth.getUser(token);
 
   if (error || !userData.user) {
@@ -58,15 +59,16 @@ export async function handleCreateCheckoutSession(
   const supabaseAdmin = getAdminClient();
   const userId = await authenticateRequestUser(supabaseAdmin, authHeader);
 
-  const successUrl = body.successUrl || 'http://localhost:5173/billing';
-  const cancelUrl = body.cancelUrl || 'http://localhost:5173/billing';
+  if (!body.successUrl || !body.cancelUrl) {
+    throw new Error('Bad Request: successUrl and cancelUrl are required.');
+  }
 
   const result = await createCheckoutSession(
     supabaseAdmin,
     userId,
     body.planId,
-    successUrl,
-    cancelUrl
+    body.successUrl,
+    body.cancelUrl
   );
 
   return result;
@@ -81,9 +83,12 @@ export async function handleCreatePortalSession(
 ) {
   const supabaseAdmin = getAdminClient();
   const userId = await authenticateRequestUser(supabaseAdmin, authHeader);
-  const returnUrl = body.returnUrl || 'http://localhost:5173/billing';
 
-  const result = await createCustomerPortalSession(supabaseAdmin, userId, returnUrl);
+  if (!body.returnUrl) {
+    throw new Error('Bad Request: returnUrl is required.');
+  }
+
+  const result = await createCustomerPortalSession(supabaseAdmin, userId, body.returnUrl);
   return result;
 }
 

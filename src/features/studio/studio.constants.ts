@@ -4,6 +4,7 @@ export type FitMode = "contain" | "cover" | "crop";
 export interface CanvasPreset {
   id: AspectRatio;
   label: string;
+  subLabel: string;
   orientation: "landscape" | "portrait" | "square" | "ultrawide";
   defaultWidth: number;
   defaultHeight: number;
@@ -14,50 +15,61 @@ export interface CanvasPreset {
 export const RATIO_PRESETS: CanvasPreset[] = [
   { 
     id: "16:9", 
-    label: "16:9 — Landscape", 
+    label: "Landscape", 
+    subLabel: "16:9",
     orientation: "landscape",
     defaultWidth: 1920, 
     defaultHeight: 1080, 
     aspectRatio: 16/9, 
-    description: "Recommended for standard YouTube streams (1920x1080)" 
+    description: "Standard YouTube & Twitch broadcast (1920x1080)" 
   },
   { 
     id: "9:16", 
-    label: "9:16 — Vertical", 
+    label: "Shorts", 
+    subLabel: "9:16",
     orientation: "portrait",
     defaultWidth: 1080, 
     defaultHeight: 1920, 
     aspectRatio: 9/16, 
-    description: "Vertical format, ideal for YouTube Shorts (1080x1920)" 
-  },
-  { 
-    id: "4:3", 
-    label: "4:3 — Standard", 
-    orientation: "landscape",
-    defaultWidth: 1440, 
-    defaultHeight: 1080, 
-    aspectRatio: 4/3, 
-    description: "Standard video composition (1440x1080)" 
+    description: "Vertical format for YouTube Shorts & TikTok (1080x1920)" 
   },
   { 
     id: "1:1", 
-    label: "1:1 — Square", 
+    label: "Square", 
+    subLabel: "1:1",
     orientation: "square",
     defaultWidth: 1080, 
     defaultHeight: 1080, 
     aspectRatio: 1, 
-    description: "Square format for feeds (1080x1080)" 
+    description: "Square format for feeds & social posts (1080x1080)" 
+  },
+  { 
+    id: "4:3", 
+    label: "Standard", 
+    subLabel: "4:3",
+    orientation: "landscape",
+    defaultWidth: 1440, 
+    defaultHeight: 1080, 
+    aspectRatio: 4/3, 
+    description: "Classic broadcast composition (1440x1080)" 
   },
   { 
     id: "21:9", 
-    label: "21:9 — Ultrawide", 
+    label: "Widescreen", 
+    subLabel: "21:9",
     orientation: "ultrawide",
     defaultWidth: 2560, 
     defaultHeight: 1080, 
     aspectRatio: 21/9, 
-    description: "Cinematic wide composition (2560x1080)" 
+    description: "Cinematic ultrawide composition (2560x1080)" 
   }
 ];
+
+export const FIT_MODE_LABELS: Record<FitMode, { label: string; description: string }> = {
+  contain: { label: "Show Full", description: "Keep entire media visible with borders if needed" },
+  cover: { label: "Fill Canvas", description: "Scale to fill the complete frame" },
+  crop: { label: "Center Crop", description: "Center and crop edges to fit exactly" },
+};
 
 export interface OutputProfile {
   id: string;

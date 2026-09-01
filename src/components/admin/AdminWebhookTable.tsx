@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { RotateCcw, CheckCircle2 } from 'lucide-react';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
-import Dialog from '../ui/Dialog';
+import AdminConfirmDialog from './AdminConfirmDialog';
 import { useAdminWebhookEvents, useAdminRetryWebhookMutation } from '../../features/adminBilling/adminBilling.hooks';
 import type { AdminWebhookEvent } from '../../features/adminBilling/adminBilling.types';
 
@@ -59,6 +59,13 @@ export default function AdminWebhookTable({ statusFilter = '' }: AdminWebhookTab
 
   return (
     <div className="space-y-4">
+      {errorMsg && (
+        <div className="p-3 bg-status-error-bg border border-status-error/30 rounded-xl text-xs text-status-error flex items-center justify-between">
+          <span>{errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)} className="font-bold ml-2">&times;</button>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-xl border border-border/70 bg-surface-1">
         <table className="w-full text-left text-xs">
           <thead>
@@ -107,7 +114,7 @@ export default function AdminWebhookTable({ statusFilter = '' }: AdminWebhookTab
                         onClick={() => setRetryTarget(evt)}
                         className="text-xs h-7 px-2.5 text-accent hover:text-accent-light"
                       >
-                        <RotateCcw size={12} />
+                        <RotateCcw size={12} className="mr-1" />
                         Retry
                       </Button>
                     ) : (
@@ -121,49 +128,18 @@ export default function AdminWebhookTable({ statusFilter = '' }: AdminWebhookTab
         </table>
       </div>
 
-      {/* Replay Confirmation Dialog */}
-      {retryTarget && (
-        <Dialog
-          isOpen={!!retryTarget}
-          onClose={() => setRetryTarget(null)}
-          title="Retry Billing Webhook Event"
-          maxWidth="sm"
-        >
-          <div className="space-y-4 text-xs">
-            <p className="text-text-secondary">
-              Are you sure you want to re-process event <strong className="text-text-primary">{retryTarget.event_type}</strong>?
-            </p>
-
-            <div className="p-3 rounded-xl bg-surface-2 border border-border/60 font-mono text-[11px] space-y-1">
-              <div>Event ID: {retryTarget.provider_event_id}</div>
-              <div>Received: {new Date(retryTarget.received_at).toLocaleString()}</div>
-              {retryTarget.error_message && (
-                <div className="text-status-error pt-1">Error: {retryTarget.error_message}</div>
-              )}
-            </div>
-
-            {errorMsg && (
-              <div className="p-2.5 rounded-lg bg-status-error/10 border border-status-error/30 text-status-error">
-                {errorMsg}
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
-              <Button variant="ghost" size="sm" onClick={() => setRetryTarget(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleExecuteRetry}
-                isLoading={retryMutation.isPending}
-              >
-                Replay Event
-              </Button>
-            </div>
-          </div>
-        </Dialog>
-      )}
+      {/* Safe Replay Confirmation Dialog */}
+      <AdminConfirmDialog
+        isOpen={Boolean(retryTarget)}
+        title="Retry Billing Webhook Event?"
+        description={`Re-process webhook event ${retryTarget?.event_type || ''} (${retryTarget?.provider_event_id || ''})?`}
+        impactMessage="This will process the event again using authoritative idempotency protection. No new payment or duplicate charges will be created."
+        confirmLabel="Retry Event"
+        severity="warning"
+        isLoading={retryMutation.isPending}
+        onConfirm={handleExecuteRetry}
+        onCancel={() => setRetryTarget(null)}
+      />
     </div>
   );
 }

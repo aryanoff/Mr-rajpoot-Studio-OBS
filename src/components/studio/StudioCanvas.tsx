@@ -111,7 +111,7 @@ export default function StudioCanvas() {
         }}
       >
         <div 
-          className="relative shadow-2xl origin-center overflow-hidden pointer-events-auto border border-white/10 ring-1 ring-black/50"
+          className="relative shadow-2xl origin-center overflow-hidden pointer-events-auto border-2 border-slate-700/80 ring-2 ring-black/80 rounded-sm"
           style={{
             width: sceneWidth,
             height: sceneHeight,
@@ -119,6 +119,13 @@ export default function StudioCanvas() {
             transform: `scale(${activeScale})`,
           }}
         >
+          {/* Subtle Output Frame Header Bar in Editor Mode */}
+          {editorMode === 'editor' && (
+            <div className="absolute top-2 left-2 z-30 pointer-events-none flex items-center gap-1.5 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded text-[11px] font-mono text-white/80 border border-white/10">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+              <span>OUTPUT FRAME ({sceneWidth}×{sceneHeight})</span>
+            </div>
+          )}
           {/* Source Layers */}
           {sortedSources.map((source) => {
             if (!source.visible) return null;

@@ -265,54 +265,61 @@ export default function StreamConfig({
             </div>
           )}
 
-          {/* Drawer Navigation Tabs */}
+          {/* Drawer Navigation Tabs (Clean unnumbered labels U-07) */}
           <div className="flex items-center gap-2 border-b border-border pb-3 mb-4 overflow-x-auto">
             <button
               onClick={() => setActiveTab("info")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
                 activeTab === "info" 
-                  ? "bg-surface-2 text-accent border border-border shadow-sm" 
-                  : "text-text-secondary hover:text-text-primary"
+                  ? "bg-accent/10 text-accent-light border border-accent/20 shadow-sm" 
+                  : "text-text-secondary hover:text-text-primary hover:bg-surface-2"
               }`}
             >
               <Settings className="w-3.5 h-3.5" />
-              1. Stream Info {isTitleConfigured ? "✓" : ""}
+              <span>Basics</span>
+              {isTitleConfigured && <span className="text-[10px] text-status-success font-bold">✓</span>}
             </button>
 
             <button
               onClick={() => setActiveTab("destination")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
                 activeTab === "destination" 
-                  ? "bg-surface-2 text-accent border border-border shadow-sm" 
-                  : "text-text-secondary hover:text-text-primary"
+                  ? "bg-accent/10 text-accent-light border border-accent/20 shadow-sm" 
+                  : "text-text-secondary hover:text-text-primary hover:bg-surface-2"
               }`}
             >
               <Youtube className="w-3.5 h-3.5 text-status-live" />
-              2. Destination {isDestinationConfigured ? "✓" : ""}
+              <span>Destination</span>
+              {isDestinationConfigured && <span className="text-[10px] text-status-success font-bold">✓</span>}
             </button>
 
             <button
               onClick={() => setActiveTab("output")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
                 activeTab === "output" 
-                  ? "bg-surface-2 text-accent border border-border shadow-sm" 
-                  : "text-text-secondary hover:text-text-primary"
+                  ? "bg-accent/10 text-accent-light border border-accent/20 shadow-sm" 
+                  : "text-text-secondary hover:text-text-primary hover:bg-surface-2"
               }`}
             >
               <Monitor className="w-3.5 h-3.5" />
-              3. Video & Quality
+              <span>Quality</span>
             </button>
 
             <button
               onClick={() => setActiveTab("check")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
                 activeTab === "check" 
-                  ? "bg-surface-2 text-accent border border-border shadow-sm" 
-                  : "text-text-secondary hover:text-text-primary"
+                  ? "bg-accent/10 text-accent-light border border-accent/20 shadow-sm" 
+                  : "text-text-secondary hover:text-text-primary hover:bg-surface-2"
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              4. Readiness Check
+              <span>Readiness</span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                isReadyToStream ? "bg-status-success-bg text-status-success" : "bg-status-warning-bg text-status-warning"
+              }`}>
+                {isReadyToStream ? "Ready" : missingItems.length}
+              </span>
             </button>
           </div>
 
@@ -477,59 +484,93 @@ export default function StreamConfig({
             </div>
           )}
 
-          {/* TAB 4: Readiness Check */}
+          {/* TAB 4: Readiness Check (U-08: 1 blocker -> 1 action) */}
           {activeTab === "check" && (
             <div className="max-w-2xl space-y-3">
               <div className="p-4 bg-surface-2 rounded-2xl border border-border space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-border">
-                  <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider">Pre-Broadcast Checklist</h4>
+                  <div>
+                    <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                      {isReadyToStream ? "Ready to Go" : "Broadcast Checklist"}
+                    </h4>
+                    <p className="text-[11px] text-text-muted mt-0.5">
+                      {isReadyToStream ? "All settings verified. You can start streaming." : `${missingItems.length} item(s) needed before starting`}
+                    </p>
+                  </div>
                   <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
                     isReadyToStream ? "bg-status-success-bg text-status-success" : "bg-status-warning-bg text-status-warning"
                   }`}>
-                    {isReadyToStream ? "All Checks Passed" : "Action Required"}
+                    {isReadyToStream ? "✓ Ready" : "Action Required"}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 bg-surface-1 rounded-xl border border-border flex items-center gap-2.5">
-                    {isSceneValid ? <CheckCircle2 className="w-4 h-4 text-status-success shrink-0" /> : <AlertCircle className="w-4 h-4 text-status-error shrink-0" />}
-                    <div>
-                      <div className="font-semibold text-text-primary">Scene Ready</div>
-                      <div className="text-[11px] text-text-muted">{sceneName || "Untitled Scene"}</div>
+                <div className="space-y-2 text-xs">
+                  {/* Scene Check */}
+                  <div className="p-2.5 bg-surface-1 rounded-xl border border-border flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      {isSceneValid ? <CheckCircle2 className="w-4 h-4 text-status-success shrink-0" /> : <AlertCircle className="w-4 h-4 text-status-error shrink-0" />}
+                      <div>
+                        <div className="font-semibold text-text-primary">Scene Configured</div>
+                        <div className="text-[11px] text-text-muted">{sceneName || "Untitled Scene"}</div>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="p-2.5 bg-surface-1 rounded-xl border border-border flex items-center gap-2.5">
-                    {hasSources ? <CheckCircle2 className="w-4 h-4 text-status-success shrink-0" /> : <AlertCircle className="w-4 h-4 text-status-error shrink-0" />}
-                    <div>
-                      <div className="font-semibold text-text-primary">Media Layers</div>
-                      <div className="text-[11px] text-text-muted">{sources.length} active layer(s)</div>
+                  {/* Sources Check */}
+                  <div className="p-2.5 bg-surface-1 rounded-xl border border-border flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      {hasSources ? <CheckCircle2 className="w-4 h-4 text-status-success shrink-0" /> : <AlertCircle className="w-4 h-4 text-status-warning shrink-0" />}
+                      <div>
+                        <div className="font-semibold text-text-primary">Video / Media Layers</div>
+                        <div className="text-[11px] text-text-muted">{hasSources ? `${sources.length} active layer(s)` : "No media added yet"}</div>
+                      </div>
                     </div>
+                    {!hasSources && (
+                      <span className="text-[11px] text-accent font-semibold">Add media via Sources panel</span>
+                    )}
                   </div>
 
-                  <div className="p-2.5 bg-surface-1 rounded-xl border border-border flex items-center gap-2.5">
-                    {isTitleConfigured ? <CheckCircle2 className="w-4 h-4 text-status-success shrink-0" /> : <AlertCircle className="w-4 h-4 text-status-error shrink-0" />}
-                    <div>
-                      <div className="font-semibold text-text-primary">Broadcast Title</div>
-                      <div className="text-[11px] text-text-muted">{streamTitle ? "Configured" : "Missing Title"}</div>
+                  {/* Title Check */}
+                  <div className="p-2.5 bg-surface-1 rounded-xl border border-border flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      {isTitleConfigured ? <CheckCircle2 className="w-4 h-4 text-status-success shrink-0" /> : <AlertCircle className="w-4 h-4 text-status-warning shrink-0" />}
+                      <div>
+                        <div className="font-semibold text-text-primary">Broadcast Title</div>
+                        <div className="text-[11px] text-text-muted">{isTitleConfigured ? streamTitle : "Please provide a broadcast title"}</div>
+                      </div>
                     </div>
+                    {!isTitleConfigured && (
+                      <button 
+                        type="button" 
+                        onClick={() => setActiveTab("info")} 
+                        className="text-[11px] font-semibold text-accent hover:underline"
+                      >
+                        Add Title
+                      </button>
+                    )}
                   </div>
 
-                  <div className="p-2.5 bg-surface-1 rounded-xl border border-border flex items-center gap-2.5">
-                    {isDestinationConfigured ? <CheckCircle2 className="w-4 h-4 text-status-success shrink-0" /> : <AlertCircle className="w-4 h-4 text-status-error shrink-0" />}
-                    <div>
-                      <div className="font-semibold text-text-primary">YouTube Connected</div>
-                      <div className="text-[11px] text-text-muted">{isDestinationConfigured ? "Stream Key Ready" : "Missing Stream Key"}</div>
+                  {/* Destination Check */}
+                  <div className="p-2.5 bg-surface-1 rounded-xl border border-border flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      {isDestinationConfigured ? <CheckCircle2 className="w-4 h-4 text-status-success shrink-0" /> : <AlertCircle className="w-4 h-4 text-status-warning shrink-0" />}
+                      <div>
+                        <div className="font-semibold text-text-primary">YouTube Destination</div>
+                        <div className="text-[11px] text-text-muted">{isDestinationConfigured ? "Connected & Ready" : "YouTube stream key not connected"}</div>
+                      </div>
                     </div>
+                    {!isDestinationConfigured && (
+                      <Button 
+                        variant="primary" 
+                        size="sm" 
+                        className="text-[11px] py-1 px-2.5"
+                        onClick={() => setIsKeyModalOpen(true)}
+                      >
+                        Connect YouTube
+                      </Button>
+                    )}
                   </div>
                 </div>
-
-                {!isReadyToStream && (
-                  <div className="p-3 bg-status-warning-bg border border-status-warning/30 rounded-xl text-xs text-status-warning flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>Please complete the missing items above before starting the live broadcast.</span>
-                  </div>
-                )}
               </div>
             </div>
           )}
