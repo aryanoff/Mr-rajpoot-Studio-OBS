@@ -594,7 +594,7 @@ export default function StreamConfig({
                 }}
                 className="text-text-muted hover:text-text-primary text-sm font-bold p-1 rounded-lg hover:bg-surface-2 transition-colors"
               >
-                &times;
+                ✕
               </button>
             </div>
 

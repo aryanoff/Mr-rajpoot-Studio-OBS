@@ -62,7 +62,7 @@ export default function AdminWebhookTable({ statusFilter = '' }: AdminWebhookTab
       {errorMsg && (
         <div className="p-3 bg-status-error-bg border border-status-error/30 rounded-xl text-xs text-status-error flex items-center justify-between">
           <span>{errorMsg}</span>
-          <button onClick={() => setErrorMsg(null)} className="font-bold ml-2">&times;</button>
+          <button onClick={() => setErrorMsg(null)} className="font-bold ml-2 text-sm leading-none">✕</button>
         </div>
       )}
 

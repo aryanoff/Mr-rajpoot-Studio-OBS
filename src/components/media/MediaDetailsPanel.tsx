@@ -169,7 +169,7 @@ function MediaDetailsForm({ asset }: { asset: MediaAsset }) {
           {asset.width && asset.height && (
             <div className="bg-surface-2/60 p-3 rounded-xl border border-border/50 space-y-1">
               <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider block">Dimensions</span>
-              <span className="text-xs font-semibold text-text-primary block">{asset.width} &times; {asset.height}</span>
+              <span className="text-xs font-semibold text-text-primary block">{asset.width} × {asset.height}</span>
             </div>
           )}
         </div>

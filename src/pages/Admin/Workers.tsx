@@ -115,7 +115,7 @@ export default function AdminWorkers() {
           }`}
         >
           <span>{feedbackMsg.text}</span>
-          <button onClick={() => setFeedbackMsg(null)} className="font-bold ml-3">&times;</button>
+          <button onClick={() => setFeedbackMsg(null)} className="font-bold ml-3 text-sm leading-none">✕</button>
         </div>
       )}
 
