@@ -26,6 +26,12 @@
    - *Status*: User `rajpootboy9451@gmail.com` exists in Supabase `auth.identities` (`provider = 'google'`).
    - *Safe to Defer Rationale*: Proves Google OAuth integration was successfully executed; session freshness window is a verification artifact, not a code defect.
 
-3. **Remote VPS Physical PC-Off Autonomy**: `NOT TESTED`
-   - *Status*: Local worker node `c29b3e12-...` actively running with fresh heartbeats; browser independence confirmed.
-   - *Safe to Defer Rationale*: Local worker continues running when the browser is closed. Deploying the worker Docker container to an external VPS (DigitalOcean/AWS) and physically powering off the local machine is an operational infrastructure deployment task, not an application code blocker.
+3. **Remote VPS Physical PC-Off Autonomy**: `DEFERRED`
+   - *Status*: Local worker node actively running with fresh heartbeats; browser independence confirmed.
+   - *Safe to Defer Rationale*: Local worker continues running when the browser is closed. Deploying the worker Docker container to an external VPS and physically powering off the local machine is an operational infrastructure deployment task.
+
+4. **Human Browser Acceptance Walkthrough**: `PENDING HUMAN QA`
+   - *Status*: DOM, AST, and responsive CSS code verified; requires human operator walkthrough in live browser across 1920x1080, 1366x768, and 390x844 viewports.
+
+5. **Public Production Host API Routing**: `PENDING HOST ROUTING`
+   - *Status*: Standalone API `src/server/index.ts` verified on local runtime; requires public reverse proxy routing (`/api/*` -> Node service) on the production domain.

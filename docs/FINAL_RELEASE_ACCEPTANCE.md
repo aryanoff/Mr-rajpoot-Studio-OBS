@@ -200,24 +200,24 @@ Live YouTube RTMP broadcasting was verified with real encoder telemetry (`avg_bi
 |---|---|---|---|
 | **Auth** | `DATABASE-VERIFIED` | **`VERIFIED`** | Bearer JWT required; 0 unauthenticated access; 401 on missing/forged tokens. |
 | **Tenant Isolation** | `DATABASE-VERIFIED` | **`VERIFIED`** | $User_A \cap User_B = \emptyset$ verified in live database test suite. |
-| **User UX** | `BROWSER-VERIFIED` | **`VERIFIED`** | 3-layer Studio hierarchy; dominant canvas; 1-blocker-1-action preflight checks. |
-| **Admin UX** | `BROWSER-VERIFIED` | **`VERIFIED`** | 6-domain command center; Needs Attention center; safety confirmation modals. |
-| **Billing API** | `LOCAL-RUNTIME` | **`VERIFIED`** | Standalone Node HTTP server `src/server/index.ts` verified on ephemeral port 3899. |
+| **Studio UX** | `CODE-VERIFIED` | **`PENDING HUMAN QA`** | 3-layer Studio hierarchy; dominant canvas; 1-blocker-1-action preflight code verified; pending human browser walkthrough. |
+| **Admin UX** | `CODE-VERIFIED` | **`PENDING HUMAN QA`** | 6-domain command center; Needs Attention center; safety confirmation modals code verified; pending human browser walkthrough. |
+| **Billing API (P0-1)** | `LOCAL-RUNTIME` | **`VERIFIED (LOCAL)`** | Standalone Node HTTP server `src/server/index.ts` verified on ephemeral port 3847; public host domain routing pending. |
 | **Stripe Checkout** | `LOCAL-RUNTIME` | **`DEFERRED`** | Local runtime verified; live gateway deferred for initial soft launch. |
 | **Stripe Webhooks** | `LOCAL-RUNTIME` | **`VERIFIED`** | Raw body preserved; signature checked; database idempotency confirmed. |
-| **Google OAuth** | `DATABASE-VERIFIED` | **`VERIFIED`** | Provider identity verified in `auth.identities`. |
-| **YouTube RTMP** | `REAL-EXTERNAL` | **`VERIFIED`** | Live encoder push to YouTube (`avg_bitrate_kbps: 2009`, `uptime: 490s+`) verified. |
+| **Google OAuth** | `DATABASE-VERIFIED` | **`VERIFIED`** | Provider identity verified in `auth.identities`; fresh human browser session pending. |
+| **YouTube RTMP** | `REAL-EXTERNAL` | **`VERIFIED`** | Live encoder push to YouTube (`avg_bitrate_kbps: 2009`, `uptime: 490s+`) verified with real-time input pacing (`-re`). |
 | **Worker** | `LOCAL-RUNTIME` | **`VERIFIED`** | Autonomous daemon with `StreamSupervisor`, watchdog, and browser independence. |
 | **Looping** | `LOCAL-RUNTIME` | **`VERIFIED`** | Multi-looping verified (596 frames, 3 loops, 1.07x speed). Independent source loops. |
 | **Media** | `DATABASE-VERIFIED` | **`VERIFIED`** | Storage upload with FFmpeg metadata extraction and retention tracking. |
 | **Scheduler** | `DATABASE-VERIFIED` | **`VERIFIED`** | Automated cron schedules with live DB hooks and worker polling. |
-| **PC-Off** | `CODE-VERIFIED` | **`DEFERRED`** | Browser independence verified; remote VPS machine power-down deferred. |
+| **PC-Off** | `LOCAL-RUNTIME` | **`DEFERRED`** | Local worker browser independence verified; remote VPS machine power-down deferred. |
 | **Observability** | `CODE-VERIFIED` | **`VERIFIED`** | Deterministic heartbeat freshness (<60s Healthy, 60-120s Degraded, >120s Offline). |
 
 ---
 
 ## 22. FINAL PRODUCTION VERDICT
 
-**FINAL VERDICT**: **`CONDITIONAL GO (SOFT-LAUNCH & AGENCY READY)`**
+**FINAL VERDICT**: **`CONDITIONAL GO — SOFT LAUNCH`**
 
-The core product is solid, secure, and production-validated for soft launch with full creator workflows, autonomous cloud broadcasting, administrative agency plan provisioning, and standalone API infrastructure.
+The platform is technically mature, decoupled, and secure. The release gate remains **CONDITIONAL GO — SOFT LAUNCH** until the standalone API is wired on the public domain, a fresh 30–60 minute live YouTube soak is performed, and human browser walkthroughs across Studio and Admin are completed.

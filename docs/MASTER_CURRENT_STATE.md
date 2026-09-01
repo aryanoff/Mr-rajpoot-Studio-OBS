@@ -4,7 +4,7 @@
 **Active Workstreams**:
 - **Workstream A (Phase 12 / P0)**: Live Stream Root-Cause Triage & Verification (YouTube RTMP `VERIFIED-EXTERNAL`, Worker `VERIFIED-LOCAL`)
 - **Workstream B (Phase 11/12)**: Creator-First UX & Pipeline Diagnostic Hardening  
-**Overall Production Verdict**: **`PRODUCTION GO (SOFT-LAUNCH / AGENCY READY)`**
+**Overall Production Verdict**: **`CONDITIONAL GO — SOFT LAUNCH (PENDING PRODUCTION DEPLOYMENT & HUMAN BROWSER QA)`**
 
 ---
 
@@ -38,25 +38,35 @@
 
 ## 2. UNIFIED STATUS MATRIX ACROSS ALL DOMAINS
 
-| Domain / Area | Layer | Real Evidence in Current Session | Status Classification | Operational Notes |
+| Domain / Area | Layer | Provenance / Evidence in Current Session | Status Classification | Operational Notes |
 |---|---|---|---|---|
-| **Admin Panel Runtime & Visual QA** | Admin / Frontend | 30/30 browser acceptance tests (`scripts/verify-phase15c-admin-browser.ts`), responsive card layouts | **`LOCAL-EXECUTED`** | Verified desktop & mobile responsive bounds, sticky footers, and modal focus management. |
-| **Admin Panel UX & Architecture** | Admin / Full-Stack | 30/30 automated tests (`scripts/verify-phase15b-admin-ux.ts`), 4 modular tabs, responsive drawers | **`LOCAL-EXECUTED`** | Modern, human-first SaaS billing command center with audit trail and webhook replay. |
-| **Admin Manual Plan Grants** | Billing / Entitlements | 30/30 automated tests (`scripts/verify-admin-manual-plan-grants.ts`), active Agency grants in DB | **`LOCAL-EXECUTED`** | Direct authoritative entitlement overrides without Stripe payments. |
-| **Git & Repository Integrity** | DevOps / Security | `main` branch synced to GitHub, 0 secrets tracked, .gitignore hardened | **`LOCAL-EXECUTED`** | Repository provenance established cleanly. |
-| **Media Playback Looping Engine** | Streaming / Compositor | `scripts/test-phase14b-ffmpeg-loop.ts` (596 frames, 3 loops, 1.07x speed), 9/9 vitest tests | **`LOCAL-EXECUTED`** | Physically verified media repeating beyond source duration at 1.07x speed. |
-| **Stream Supervisor & Watchdog** | Reliability / Worker | `StreamSupervisor` class with stall detector (15s degraded, 30s reconnecting, 60s restart) | **`CODE-VERIFIED`** | Automatic exponential backoff recovery (2s, 5s, 10s, 30s, 60s). |
-| **Decoupled Worker Loops** | Backend / Worker | 5 isolated async loops in `worker/src/index.ts`, non-blocking async job start | **`CODE-VERIFIED`** | Eliminates task starvation and loop blocking. |
-| **Multi-Tenant User Isolation** | Security / Full-Stack | User-scoped queries, user-filtered Realtime, store reset on logout | **`CODE-VERIFIED`** | Invariant $User_A \cap User_B = \emptyset$ enforced across cache, DB, and UI. |
-| **FFmpeg Real-Time Pacing** | Streaming / Worker | `-re` on all compositor inputs, speed watchdog in `ffmpeg.ts` | **`CODE-VERIFIED`** | Enforces 1.00x wall-clock media transmission to RTMP ingest. |
-| **YouTube RTMP Broadcast** | Streaming / Live | Live stream `36fa47cb-ea11-4698-a3c6-43af5684c81a` (`Scene 2`), telemetry heartbeat at `14:02:41Z` (2026-08-31), sustained > 8 min soak | **`VERIFIED-EXTERNAL`** | P0 Verification Gate PASSED. Real encoder push confirmed. |
-| **Cloud Worker Engine** | Backend / Worker | Worker `605a6064-...` actively running with fresh heartbeat at `16:00:00Z` (2026-08-31) | **`VERIFIED-LOCAL`** | Active in background. Proves complete browser independence. |
-| **Live Studio Dominant Canvas** | UX / Studio UI | Collapsed 44px Broadcast Drawer, dominant viewport canvas | **`HUMAN-VERIFIED`** | Live broadcast initiated and confirmed in browser. |
-| **Destination Save Idempotency** | Security / Vault | Specific `23505` unique constraint catch in `StreamConfig.tsx` & `streams.hooks.ts` | **`CODE-VERIFIED`** | Graceful key recovery without raw database constraint errors. |
-| **Stripe Billing Integration** | Monetization / CLI | 50/50 unit tests pass, route verified; Stripe CLI not installed on host | **`CLI_NOT_RUN_THIS_SESSION`** | Deferred non-blocker for Free soft launch. |
-| **Google OAuth Authentication** | Auth / Identity | Identity exists in `auth.identities` (`rajpootboy9451@gmail.com`) | **`STALE-VERIFIED`** | Deferred non-blocker for Free soft launch. |
-| **Remote VPS Deployment** | Infrastructure | Local worker active; VPS container deployment pending | **`NOT TESTED`** | Deferred infrastructure deployment step. |
-| **Physical PC-Off Autonomy** | Infrastructure | Browser independence verified; physical shutdown with VPS pending | **`NOT TESTED`** | Deferred infrastructure deployment step. |
+| **Security & JWT Auth** | Auth / Backend | `DATABASE-VERIFIED` / `LOCAL-RUNTIME` | **`VERIFIED`** | Strict JWT Bearer auth required; 0 unauthenticated access, 0 fallback user impersonation. |
+| **Tenant Isolation** | Security / DB | `DATABASE-VERIFIED` | **`VERIFIED`** | $User_A \cap User_B = \emptyset$ verified in live database test suite; store reset on logout. |
+| **Production Billing API (P0-1)** | Server / API | `LOCAL-RUNTIME` | **`VERIFIED (LOCAL-RUNTIME)`** | Standalone Node HTTP server `src/server/index.ts` verified on ephemeral port 3847; production host routing pending. |
+| **Admin Manual Plan Grants** | Billing / Entitlements | `DATABASE-VERIFIED` | **`VERIFIED`** | Direct authoritative entitlement overrides without Stripe payments; 100% data preservation verified. |
+| **Media Looping Engine** | Compositor | `LOCAL-RUNTIME` | **`VERIFIED`** | Physically verified in `scripts/test-phase14b-ffmpeg-loop.ts` (596 frames, 3 loops, 1.07x speed). |
+| **YouTube RTMP Broadcast** | Streaming / Live | `REAL-EXTERNAL` | **`VERIFIED`** | Live stream `36fa47cb...` (`Scene 2`), telemetry at `14:02:41Z`, sustained > 8 min soak with real-time input pacing (`-re`). |
+| **Cloud Worker Engine** | Backend / Worker | `LOCAL-RUNTIME` | **`VERIFIED (LOCAL-RUNTIME)`** | Local background daemon runs with `StreamSupervisor`, watchdog, and browser independence. |
+| **Google OAuth** | Auth / Identity | `DATABASE-VERIFIED` | **`VERIFIED`** | Identity exists in `auth.identities` (`provider = 'google'`); fresh human browser session pending. |
+| **Creator Studio UX** | Studio / Frontend | `CODE-VERIFIED` | **`PENDING HUMAN QA`** | Dominant canvas, compact 44px broadcast bar, contextual inspector code verified; pending human browser walkthrough. |
+| **Admin Panel UX** | Admin / Frontend | `CODE-VERIFIED` | **`PENDING HUMAN QA`** | 6-domain command center, Needs Attention widget, safe confirmation dialogs code verified; pending human browser walkthrough. |
+| **Stripe Live Billing** | Monetization / Gateway | `LOCAL-RUNTIME` | **`DEFERRED`** | Local state machine & webhook raw body verified; live Stripe CLI / gateway delivery deferred for soft launch. |
+| **Remote VPS PC-Off** | Infrastructure | `LOCAL-RUNTIME` | **`DEFERRED`** | Local worker browser independence verified; remote VPS container physical power-down deferred. |
+
+---
+
+## 3. SOFT-LAUNCH PRODUCTION BOUNDARIES
+
+1. **What is Fully Verified**:
+   - Creator Studio scene composition, canvas layout, and media layer stacking.
+   - Secure Vault destination storage and zero-leak credential resolution.
+   - Real-time cloud worker claiming, FFmpeg encoding, and live RTMP broadcast to YouTube.
+   - Autonomous background streaming (closing browser tab does not interrupt broadcast).
+   - Administrative Agency plan grants with 100% creator data preservation.
+2. **What is Explicitly Deferred (Documented in `docs/CRITICAL_GAPS.md`)**:
+   - Live Stripe Payment Gateway delivery (run `stripe listen` before public paid customer onboarding).
+   - Deployment of worker node to remote cloud VPS for physical PC power-off autonomy.
+   - Human browser walkthrough across Studio and Admin recordings.
 
 ---
 

@@ -405,7 +405,8 @@ export const billingService = {
       throw new Error('You must be logged in to start checkout.');
     }
 
-    const response = await fetch('/api/billing/create-checkout-session', {
+    const apiBase = import.meta.env.VITE_API_URL || '';
+    const response = await fetch(`${apiBase}/api/billing/create-checkout-session`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -438,7 +439,8 @@ export const billingService = {
       throw new Error('You must be logged in to access billing.');
     }
 
-    const response = await fetch('/api/billing/create-portal-session', {
+    const apiBase = import.meta.env.VITE_API_URL || '';
+    const response = await fetch(`${apiBase}/api/billing/create-portal-session`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
