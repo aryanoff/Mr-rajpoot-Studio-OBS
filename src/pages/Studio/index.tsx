@@ -1,56 +1,103 @@
 import { useEffect, useRef, useState } from "react";
 import { useStreams, useStopStream, useCreateStream } from "../../features/streams/streams.hooks";
-import { useSaveScene } from "../../features/studio/studio.hooks";
+import { useSaveScene, useScenes } from "../../features/studio/studio.hooks";
 import { useStudioStore } from "../../stores/studio.store";
+import { validateSceneSnapshot } from "../../features/studio/snapshotValidator";
 import StudioCanvas from "../../components/studio/StudioCanvas";
 import MediaPickerModal from "../../components/studio/MediaPickerModal";
 import Inspector from "../../components/studio/Inspector";
 import SourceList from "../../components/studio/SourceList";
 import SceneList from "../../components/studio/SceneList";
-import StreamConfig from "../../components/studio/StreamConfig";
+import StreamConfig, { type BroadcastState } from "../../components/studio/StreamConfig";
 import Badge from "../../components/ui/Badge";
 import { useDebounce } from "../../hooks/useDebounce";
 import { calculateMediaFit } from "../../features/studio/studio.constants";
-import { Undo2, Redo2, Edit3, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, RefreshCw } from "lucide-react";
+import { Undo2, Redo2, Edit3, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, RefreshCw, Lock } from "lucide-react";
 
 import { useAuthStore } from "../../stores/auth.store";
+
+const EMPTY_SCENES: any[] = [];
 
 export default function Studio() {
   const user = useAuthStore((state) => state.user);
   const { data: streams = [] } = useStreams();
+  const { data: scenes = EMPTY_SCENES, isLoading: isScenesLoading, isError: isScenesError } = useScenes();
   const stopStream = useStopStream();
   const saveScene = useSaveScene();
   const createStream = useCreateStream();
 
+  // Find active stream for the current user
   const activeStream = streams.find(
     (s) => s.user_id === user?.id && s.status !== "completed" && s.status !== "cancelled" && s.status !== "error"
   );
-  const isLive = activeStream?.status === "live";
-  const isStarting = activeStream?.status === "queued" || activeStream?.status === "reconnecting";
-  const isStopping = activeStream?.status === "stopping";
 
-  const studioState = useStudioStore();
-  const {
-    sceneName,
-    setSceneName,
-    sources,
-    addSource,
-    removeSource,
-    selectedSourceId,
-    undo,
-    redo,
-    historyIndex,
-    history,
-    saveStatus,
-    editorMode,
-    setEditorMode,
-    isLeftPanelCollapsed,
-    isRightPanelCollapsed,
-    toggleLeftPanel,
-    toggleRightPanel,
-    streamThumbnail,
-    setStreamThumbnail
-  } = useStudioStore();
+  // Authoritative Deterministic Broadcast State Mapping
+  let broadcastState: BroadcastState = "OFFLINE";
+  if (createStream.isPending) {
+    broadcastState = "PREPARING";
+  } else if (activeStream) {
+    const status = activeStream.status as string;
+    if (status === "queued") broadcastState = "PREPARING";
+    else if (status === "starting") broadcastState = "STARTING";
+    else if (status === "live") broadcastState = "LIVE";
+    else if (status === "reconnecting") broadcastState = "RECONNECTING";
+    else if (status === "stopping") broadcastState = "STOPPING";
+    else broadcastState = "OFFLINE";
+  }
+
+  // Broadcast Lock Mode (Freezes mutations during active streams: STARTING, LIVE, RECONNECTING, STOPPING)
+  const isBroadcastLocked = 
+    broadcastState === "STARTING" || 
+    broadcastState === "LIVE" || 
+    broadcastState === "RECONNECTING" || 
+    broadcastState === "STOPPING";
+
+  const isLive = broadcastState === "LIVE";
+  const isStarting = broadcastState === "STARTING" || broadcastState === "PREPARING";
+
+  // Narrow Zustand selectors (prevents whole-store subscription rerenders)
+  const sceneId = useStudioStore((s) => s.sceneId);
+  const sceneWidth = useStudioStore((s) => s.sceneWidth);
+  const sceneName = useStudioStore((s) => s.sceneName);
+  const setSceneName = useStudioStore((s) => s.setSceneName);
+  const sources = useStudioStore((s) => s.sources);
+  const addSource = useStudioStore((s) => s.addSource);
+  const removeSource = useStudioStore((s) => s.removeSource);
+  const selectedSourceId = useStudioStore((s) => s.selectedSourceId);
+  const undo = useStudioStore((s) => s.undo);
+  const redo = useStudioStore((s) => s.redo);
+  const historyIndex = useStudioStore((s) => s.historyIndex);
+  const history = useStudioStore((s) => s.history);
+  const saveStatus = useStudioStore((s) => s.saveStatus);
+  const editorMode = useStudioStore((s) => s.editorMode);
+  const setEditorMode = useStudioStore((s) => s.setEditorMode);
+  const isLeftPanelCollapsed = useStudioStore((s) => s.isLeftPanelCollapsed);
+  const isRightPanelCollapsed = useStudioStore((s) => s.isRightPanelCollapsed);
+  const toggleLeftPanel = useStudioStore((s) => s.toggleLeftPanel);
+  const toggleRightPanel = useStudioStore((s) => s.toggleRightPanel);
+  const streamThumbnail = useStudioStore((s) => s.streamThumbnail);
+  const setStreamThumbnail = useStudioStore((s) => s.setStreamThumbnail);
+  const setIsBroadcastLocked = useStudioStore((s) => s.setIsBroadcastLocked);
+  const setScene = useStudioStore((s) => s.setScene);
+  const setStudioLoadingState = useStudioStore((s) => s.setStudioLoadingState);
+
+  // Authoritative Studio Loading & Initial Scene Coordination
+  useEffect(() => {
+    if (isScenesLoading) {
+      setStudioLoadingState("LOADING_SCENE");
+    } else if (isScenesError) {
+      setStudioLoadingState("ERROR");
+    } else if (scenes.length === 0) {
+      setStudioLoadingState("EMPTY");
+    } else if (!sceneId && scenes.length > 0) {
+      setScene(scenes[0], scenes[0].scene_sources || []);
+    }
+  }, [isScenesLoading, isScenesError, scenes, sceneId, setScene, setStudioLoadingState]);
+
+  // Synchronize broadcast lock into store
+  useEffect(() => {
+    setIsBroadcastLocked(isBroadcastLocked);
+  }, [isBroadcastLocked, setIsBroadcastLocked]);
 
   const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
   const [pickerMediaType, setPickerMediaType] = useState<"video" | "image" | "audio" | null>(null);
@@ -58,22 +105,25 @@ export default function Studio() {
   const [isEditingSceneName, setIsEditingSceneName] = useState(false);
   const [tempSceneName, setTempSceneName] = useState("");
 
-
-  // ── Autosave Logic ──
+  // ── Autosave Logic (Disabled during active broadcast lock) ──
   const debouncedHistoryIndex = useDebounce(historyIndex, 750);
   const prevHistoryRef = useRef(debouncedHistoryIndex);
 
   useEffect(() => {
     if (debouncedHistoryIndex !== prevHistoryRef.current) {
       prevHistoryRef.current = debouncedHistoryIndex;
-      if (saveStatus === 'unsaved') {
+      if (saveStatus === 'unsaved' && !isBroadcastLocked) {
         saveScene.mutate(useStudioStore.getState());
       }
     }
-  }, [debouncedHistoryIndex, saveStatus, saveScene]);
+  }, [debouncedHistoryIndex, saveStatus, saveScene, isBroadcastLocked]);
 
-  // ── Stream Start Handler (Immutable Snapshot Creation) ──
+  // ── Stream Start Handler (Immutable Snapshot Creation & Integrity Gate) ──
   const handleStartStream = async (config: any) => {
+    if (isBroadcastLocked) {
+      throw new Error("A broadcast is already active or in transition.");
+    }
+
     // 1. Flush any pending scene saves
     const scene = await saveScene.mutateAsync(useStudioStore.getState());
     
@@ -113,7 +163,13 @@ export default function Studio() {
       startedAt: new Date().toISOString()
     };
 
-    // 3. Create live stream record with snapshot
+    // 3. Preflight Snapshot Integrity Gate
+    const validation = validateSceneSnapshot(snapshotPayload);
+    if (!validation.isValid) {
+      throw new Error(`Cannot start broadcast: ${validation.errors.join("; ")}`);
+    }
+
+    // 4. Create live stream record with snapshot
     await createStream.mutateAsync({
       title: config.title || scene.name || "Live Stream Broadcast",
       platform: "youtube",
@@ -126,7 +182,7 @@ export default function Studio() {
   };
 
   const handleStopStream = async () => {
-    if (activeStream) {
+    if (activeStream && activeStream.status !== "stopping" && !stopStream.isPending) {
       await stopStream.mutateAsync(activeStream.id);
     }
   };
@@ -134,7 +190,7 @@ export default function Studio() {
   const handleAddText = () => {
     addSource({
       id: crypto.randomUUID(),
-      scene_id: studioState.sceneId || 'temp',
+      scene_id: sceneId || 'temp',
       type: 'text',
       name: 'Text Layer',
       x: 80,
@@ -155,12 +211,12 @@ export default function Studio() {
   const handleAddOverlay = () => {
     addSource({
       id: crypto.randomUUID(),
-      scene_id: studioState.sceneId || 'temp',
+      scene_id: sceneId || 'temp',
       type: 'overlay',
       name: 'Color Overlay',
       x: 0,
       y: 0,
-      width: studioState.sceneWidth,
+      width: sceneWidth,
       height: 160,
       rotation: 0,
       opacity: 0.6,
@@ -176,6 +232,7 @@ export default function Studio() {
   // ── Keyboard Shortcuts ──
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isBroadcastLocked) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         saveScene.mutate(useStudioStore.getState());
@@ -194,7 +251,7 @@ export default function Studio() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, selectedSourceId, removeSource, saveScene]);
+  }, [undo, redo, selectedSourceId, removeSource, saveScene, isBroadcastLocked]);
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col -mx-4 -mb-4 -mt-4 bg-background overflow-hidden select-none">
@@ -227,43 +284,56 @@ export default function Studio() {
           ) : (
             <button
               onClick={() => {
+                if (isBroadcastLocked) return;
                 setTempSceneName(sceneName);
                 setIsEditingSceneName(true);
               }}
-              className="flex items-center gap-1.5 font-bold text-sm text-text-primary hover:text-accent transition-colors truncate text-left"
-              title="Click to rename scene"
+              disabled={isBroadcastLocked}
+              className="flex items-center gap-1.5 font-bold text-sm text-text-primary hover:text-accent transition-colors truncate text-left disabled:opacity-80 disabled:cursor-not-allowed"
+              title={isBroadcastLocked ? "Scene locked during broadcast" : "Click to rename scene"}
             >
               <span className="truncate">{sceneName || "Untitled Scene"}</span>
-              <Edit3 className="w-3.5 h-3.5 opacity-50 shrink-0" />
+              {!isBroadcastLocked && <Edit3 className="w-3.5 h-3.5 opacity-50 shrink-0" />}
             </button>
           )}
 
           <Badge 
             variant={
-              isLive ? (activeStream?.stream_analytics?.[0]?.avg_bitrate_kbps && activeStream.stream_analytics[0].avg_bitrate_kbps < 800 ? "warning" : "live")
-              : (isStarting || activeStream?.status === "reconnecting") ? "warning"
-              : isStopping ? "warning"
+              broadcastState === 'LIVE' ? (
+                activeStream?.stream_analytics?.[0]?.health === "NO_SIGNAL" ? "error"
+                : (activeStream?.stream_analytics?.[0]?.health === "DEGRADED" || (activeStream?.stream_analytics?.[0]?.avg_bitrate_kbps && activeStream.stream_analytics[0].avg_bitrate_kbps < 800)) ? "warning"
+                : "live"
+              )
+              : (broadcastState === 'RECONNECTING' || broadcastState === 'STARTING' || broadcastState === 'PREPARING' || broadcastState === 'STOPPING') ? "warning"
               : "offline"
             } 
             size="sm"
           >
-            {isLive 
-              ? (activeStream?.stream_analytics?.[0]?.avg_bitrate_kbps && activeStream.stream_analytics[0].avg_bitrate_kbps < 800 ? "● LIVE — WEAK CONNECTION" : "● LIVE") 
-              : activeStream?.status === "reconnecting" ? "↻ Reconnecting..." 
-              : activeStream?.status === "queued" ? "Preparing..."
-              : isStarting ? "Starting..." 
-              : isStopping ? "Ending Broadcast..." 
+            {broadcastState === 'LIVE' 
+              ? (
+                  activeStream?.stream_analytics?.[0]?.health === "NO_SIGNAL" 
+                    ? "⚠ NO SIGNAL — YOUTUBE NOT RECEIVING" 
+                    : (activeStream?.stream_analytics?.[0]?.health === "DEGRADED" || (activeStream?.stream_analytics?.[0]?.avg_bitrate_kbps && activeStream.stream_analytics[0].avg_bitrate_kbps < 800)) 
+                      ? "⚠ LIVE — UNSTABLE" 
+                      : "● LIVE — GOOD"
+                ) 
+              : broadcastState === 'RECONNECTING' ? "↻ Reconnecting..." 
+              : broadcastState === 'PREPARING' ? "Preparing Broadcast..."
+              : broadcastState === 'STARTING' ? "Starting Stream..." 
+              : broadcastState === 'STOPPING' ? "Ending Broadcast..." 
               : "Offline"}
           </Badge>
 
           {/* Live Telemetry Info */}
-          {isLive && activeStream?.stream_analytics?.[0] && (
+          {broadcastState === 'LIVE' && activeStream?.stream_analytics?.[0] && (
             <span className="hidden md:inline-flex items-center gap-2 text-xs font-mono text-text-secondary bg-surface-2 px-2.5 py-0.5 rounded-lg border border-border">
               <span className={activeStream.stream_analytics[0].avg_bitrate_kbps < 800 ? "text-amber-400 font-semibold" : "text-emerald-400 font-semibold"}>
                 {(activeStream.stream_analytics[0].avg_bitrate_kbps / 1000).toFixed(1)} Mbps
               </span>
               <span className="text-text-muted">&bull;</span>
-              <span>30 FPS</span>
+              <span className="font-semibold text-text-primary">
+                {activeStream.stream_analytics[0].current_fps ? `${activeStream.stream_analytics[0].current_fps} FPS` : `${activeStream.fps || 30} FPS`}
+              </span>
               <span className="text-text-muted">&bull;</span>
               <span>{new Date((activeStream.stream_analytics[0].uptime_seconds || 0) * 1000).toISOString().substring(11, 19)}</span>
             </span>
@@ -274,9 +344,18 @@ export default function Studio() {
         <div className="flex items-center gap-2.5 shrink-0">
           {/* Save status badge */}
           <div className="flex items-center gap-1.5 text-xs">
-            {saveStatus === 'saving' && <RefreshCw className="w-3 h-3 animate-spin text-accent" />}
-            <span className={`font-medium ${saveStatus === 'saved' ? 'text-status-success' : saveStatus === 'saving' ? 'text-accent' : saveStatus === 'error' ? 'text-status-error' : 'text-text-muted'}`}>
-              {saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving...' : saveStatus === 'error' ? 'Save Failed' : 'Unsaved'}
+            {saveStatus === 'saving' && !isBroadcastLocked && <RefreshCw className="w-3 h-3 animate-spin text-accent" />}
+            {isBroadcastLocked && <Lock className="w-3 h-3 text-amber-400" />}
+            <span className={`font-medium ${isBroadcastLocked ? 'text-amber-400' : saveStatus === 'saved' ? 'text-status-success' : saveStatus === 'saving' ? 'text-accent' : saveStatus === 'error' ? 'text-status-error' : 'text-text-muted'}`}>
+              {isBroadcastLocked 
+                ? 'Live Snapshot Locked' 
+                : saveStatus === 'saved' 
+                  ? 'Saved' 
+                  : saveStatus === 'saving' 
+                    ? 'Saving...' 
+                    : saveStatus === 'error' 
+                      ? 'Save Failed' 
+                      : 'Unsaved'}
             </span>
           </div>
 
@@ -286,17 +365,17 @@ export default function Studio() {
           <div className="flex items-center gap-1">
             <button
               onClick={undo}
-              disabled={historyIndex === 0}
+              disabled={isBroadcastLocked || historyIndex === 0}
               className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-2 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-              title="Undo (Ctrl+Z)"
+              title={isBroadcastLocked ? "Undo locked during broadcast" : "Undo (Ctrl+Z)"}
             >
               <Undo2 className="w-4 h-4" />
             </button>
             <button
               onClick={redo}
-              disabled={historyIndex >= history.length - 1}
+              disabled={isBroadcastLocked || historyIndex >= history.length - 1}
               className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-2 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-              title="Redo (Ctrl+Shift+Z)"
+              title={isBroadcastLocked ? "Redo locked during broadcast" : "Redo (Ctrl+Shift+Z)"}
             >
               <Redo2 className="w-4 h-4" />
             </button>
@@ -408,11 +487,13 @@ export default function Studio() {
         {/* Bottom Panel: Stream Configuration & Readiness Check */}
         <StreamConfig 
           onStartStream={handleStartStream}
+          broadcastState={broadcastState}
           isStarting={isStarting}
           isLive={isLive}
           onStopStream={handleStopStream}
           thumbnailUrl={streamThumbnail}
           onSelectThumbnail={() => {
+            if (isBroadcastLocked) return;
             setPickerPurpose("thumbnail");
             setPickerMediaType("image");
             setIsMediaPickerOpen(true);
@@ -426,6 +507,10 @@ export default function Studio() {
         mediaType={pickerMediaType}
         onClose={() => setIsMediaPickerOpen(false)}
         onSelect={(asset) => {
+          if (isBroadcastLocked) {
+            setIsMediaPickerOpen(false);
+            return;
+          }
           if (pickerPurpose === "thumbnail") {
             setStreamThumbnail(asset.file_path);
             setIsMediaPickerOpen(false);

@@ -15,7 +15,9 @@ import {
   AlignLeft, 
   AlignCenter, 
   AlignRight, 
-  Square
+  Square,
+  Lock,
+  Repeat
 } from "lucide-react";
 import { calculateMediaFit, RATIO_PRESETS, isAspectRatioMismatch, FIT_MODE_LABELS } from "../../features/studio/studio.constants";
 import type { FitMode } from "../../features/studio/studio.constants";
@@ -24,6 +26,7 @@ import MediaPreview from "./MediaPreview";
 export default function Inspector() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   
+  const isBroadcastLocked = useStudioStore((s) => s.isBroadcastLocked);
   const selectedSourceId = useStudioStore((s) => s.selectedSourceId);
   const sources = useStudioStore((s) => s.sources);
   const updateSource = useStudioStore((s) => s.updateSource);
@@ -38,16 +41,30 @@ export default function Inspector() {
 
   const selectedSource = sources.find((s) => s.id === selectedSourceId);
 
+  // ── Broadcast Lock Banner ──
+  const lockBanner = isBroadcastLocked ? (
+    <div className="flex items-start gap-2 p-2.5 rounded-xl bg-accent/10 border border-accent/30 text-accent text-xs">
+      <Lock className="w-4 h-4 shrink-0 mt-0.5" />
+      <div>
+        <p className="font-semibold text-text-primary">Broadcast Active</p>
+        <p className="text-[11px] text-text-secondary leading-tight mt-0.5">
+          Scene settings and layer transforms are locked to the stream snapshot.
+        </p>
+      </div>
+    </div>
+  ) : null;
+
   // ── No Source Selected: Scene Properties ──
   if (!selectedSource) {
     return (
       <div className="flex flex-col h-full overflow-y-auto w-full p-4 space-y-5 custom-scrollbar bg-surface-1">
+        {lockBanner}
         <div className="flex items-center gap-2 pb-3 border-b border-border">
           <Sliders className="w-4 h-4 text-accent" />
           <h3 className="font-semibold text-text-primary text-sm">Scene Layout</h3>
         </div>
 
-        <div className="space-y-4">
+        <fieldset disabled={isBroadcastLocked} className="space-y-4 disabled:opacity-60">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">Canvas Format</label>
             <div className="grid grid-cols-1 gap-2">
@@ -107,7 +124,7 @@ export default function Inspector() {
           <div className="p-3 bg-surface-2/60 rounded-xl border border-border/50 text-xs text-text-muted leading-relaxed">
             💡 Select any layer on the canvas or in the Sources list to edit its options.
           </div>
-        </div>
+        </fieldset>
       </div>
     );
   }
@@ -156,8 +173,10 @@ export default function Inspector() {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto w-full p-4 space-y-5 custom-scrollbar bg-surface-1">
-      {/* 1. Header with Layer Name */}
-      <div className="flex items-center justify-between pb-3 border-b border-border">
+      {lockBanner}
+      <fieldset disabled={isBroadcastLocked} className="space-y-5 flex flex-col flex-1 disabled:opacity-75">
+        {/* 1. Header with Layer Name */}
+        <div className="flex items-center justify-between pb-3 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
           {renderIcon()}
           <input 
@@ -191,47 +210,99 @@ export default function Inspector() {
       {/* 2. Video & Audio Playback Controls */}
       {(selectedSource.type === 'video' || selectedSource.type === 'audio') && (
         <div className="space-y-3">
-          <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">Playback</label>
-          <div className="space-y-2 bg-surface-2 p-3 rounded-xl border border-border">
-            <div className="flex items-center justify-between text-xs text-text-secondary">
-              <span className="flex items-center gap-1.5 font-medium">
-                {config.muted ? <VolumeX className="w-3.5 h-3.5 text-status-error" /> : <Volume2 className="w-3.5 h-3.5 text-accent" />}
-                Volume
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">Playback</label>
+            {isBroadcastLocked && (
+              <span className="text-[11px] font-medium text-amber-400 flex items-center gap-1">
+                <Lock className="w-3 h-3" /> Live Snapshot Locked
               </span>
-              <span className="font-mono">{config.muted ? 'Muted' : `${Math.round((config.volume ?? 1) * 100)}%`}</span>
+            )}
+          </div>
+
+          <div className="space-y-3 bg-surface-2 p-3 rounded-xl border border-border">
+            {/* Volume Control */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-text-secondary">
+                <span className="flex items-center gap-1.5 font-medium">
+                  {config.muted ? <VolumeX className="w-3.5 h-3.5 text-status-error" /> : <Volume2 className="w-3.5 h-3.5 text-accent" />}
+                  Volume
+                </span>
+                <span className="font-mono">{config.muted ? 'Muted' : `${Math.round((config.volume ?? 1) * 100)}%`}</span>
+              </div>
+              
+              <input 
+                type="range" 
+                min="0" max="1" step="0.05"
+                disabled={isBroadcastLocked}
+                value={config.muted ? 0 : (config.volume ?? 1)} 
+                onChange={(e) => {
+                  handleConfigChange('volume', Number(e.target.value));
+                  if (config.muted) handleConfigChange('muted', false);
+                }}
+                className="w-full accent-accent cursor-pointer disabled:opacity-50" 
+              />
+
+              <div className="flex items-center justify-between pt-1 text-xs">
+                <label className="flex items-center gap-2 text-text-secondary cursor-pointer font-medium">
+                  <input 
+                    type="checkbox"
+                    disabled={isBroadcastLocked}
+                    checked={config.muted ?? false}
+                    onChange={(e) => handleConfigChange('muted', e.target.checked)}
+                    className="rounded border-border text-accent focus:ring-accent disabled:opacity-50"
+                  />
+                  <span>Mute Audio</span>
+                </label>
+              </div>
             </div>
-            
-            <input 
-              type="range" 
-              min="0" max="1" step="0.05"
-              value={config.muted ? 0 : (config.volume ?? 1)} 
-              onChange={(e) => {
-                handleConfigChange('volume', Number(e.target.value));
-                if (config.muted) handleConfigChange('muted', false);
-              }}
-              className="w-full accent-accent cursor-pointer" 
-            />
 
-            <div className="flex items-center justify-between pt-1 text-xs">
-              <label className="flex items-center gap-2 text-text-secondary cursor-pointer font-medium">
-                <input 
-                  type="checkbox"
-                  checked={config.muted ?? false}
-                  onChange={(e) => handleConfigChange('muted', e.target.checked)}
-                  className="rounded border-border text-accent focus:ring-accent"
-                />
-                <span>Mute</span>
-              </label>
+            {/* First-Class Loop Setting */}
+            <div className="pt-2 border-t border-border/70">
+              <div className={`p-2.5 rounded-lg border transition-all ${
+                (config.loop ?? true) ? "bg-accent/10 border-accent/30" : "bg-surface-3/50 border-border"
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Repeat className={`w-4 h-4 ${(config.loop ?? true) ? "text-accent" : "text-text-muted"}`} />
+                    <div>
+                      <div className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                        {selectedSource.type === 'audio' ? 'Loop Audio' : 'Loop Video'}
+                        <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold ${
+                          (config.loop ?? true) ? "bg-accent/20 text-accent" : "bg-surface-2 text-text-muted border border-border/50"
+                        }`}>
+                          {(config.loop ?? true) ? "ON" : "OFF"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-text-muted">
+                        {(config.loop ?? true) ? "Continuously loop for 24/7 broadcast" : "Play once and freeze on last frame"}
+                      </div>
+                    </div>
+                  </div>
 
-              <label className="flex items-center gap-2 text-text-secondary cursor-pointer font-medium">
-                <input 
-                  type="checkbox"
-                  checked={config.loop ?? true}
-                  onChange={(e) => handleConfigChange('loop', e.target.checked)}
-                  className="rounded border-border text-accent focus:ring-accent"
-                />
-                <span>{selectedSource.type === 'audio' ? 'Loop Audio' : 'Loop Video'}</span>
-              </label>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={config.loop ?? true}
+                    aria-label={`Toggle loop for ${selectedSource.name || selectedSource.type}`}
+                    disabled={isBroadcastLocked}
+                    onClick={() => handleConfigChange('loop', !(config.loop ?? true))}
+                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors ${
+                      (config.loop ?? true)
+                        ? "bg-accent text-white hover:bg-accent-hover"
+                        : "bg-surface-2 border border-border text-text-secondary hover:text-text-primary"
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {(config.loop ?? true) ? "Enabled" : "Disabled"}
+                  </button>
+                </div>
+
+                {isBroadcastLocked && (
+                  <div className="mt-2 pt-2 border-t border-border/50 text-[11px] text-amber-400/90 flex items-start gap-1.5">
+                    <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>The current broadcast is using the saved scene snapshot. Changes apply to next broadcast.</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -406,6 +477,7 @@ export default function Inspector() {
           </div>
         )}
       </div>
+      </fieldset>
     </div>
   );
 }

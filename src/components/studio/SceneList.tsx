@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useScenes, useCreateScene, useDeleteScene, useDuplicateScene, useRenameScene } from "../../features/studio/studio.hooks";
 import { useStudioStore } from "../../stores/studio.store";
 import { Clapperboard, Plus, MoreVertical, Copy, Trash2, Edit2, Check, X, AlertCircle } from "lucide-react";
 import Button from "../ui/Button";
 
+const EMPTY_SCENES: any[] = [];
+
 export default function SceneList() {
-  const { data: scenes = [], isLoading } = useScenes();
+  const { data: scenes = EMPTY_SCENES, isLoading } = useScenes();
   const createScene = useCreateScene();
   const deleteScene = useDeleteScene();
   const duplicateScene = useDuplicateScene();
@@ -13,19 +15,15 @@ export default function SceneList() {
   
   const currentSceneId = useStudioStore((s) => s.sceneId);
   const setScene = useStudioStore((s) => s.setScene);
+  const isBroadcastLocked = useStudioStore((s) => s.isBroadcastLocked);
 
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [blockerMessage, setBlockerMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isLoading && scenes.length > 0 && !currentSceneId) {
-      setScene(scenes[0], scenes[0].scene_sources || []);
-    }
-  }, [isLoading, scenes, currentSceneId, setScene]);
-
   const handleCreateScene = async () => {
+    if (isBroadcastLocked) return;
     try {
       const newScene = await createScene.mutateAsync(`Scene ${scenes.length + 1}`);
       setScene(newScene, []);
@@ -35,7 +33,7 @@ export default function SceneList() {
   };
 
   const handleSelectScene = (scene: any) => {
-    if (scene.id === currentSceneId) return;
+    if (isBroadcastLocked || scene.id === currentSceneId) return;
     setScene(scene, scene.scene_sources || []);
   };
 
@@ -107,10 +105,10 @@ export default function SceneList() {
         <Button 
           variant="ghost" 
           size="sm" 
-          className="w-7 h-7 p-0 text-text-secondary hover:text-text-primary"
+          className="w-7 h-7 p-0 text-text-secondary hover:text-text-primary disabled:opacity-30"
           onClick={handleCreateScene}
-          disabled={createScene.isPending}
-          title="Create New Scene"
+          disabled={createScene.isPending || isBroadcastLocked}
+          title={isBroadcastLocked ? "Scenes locked during broadcast" : "Create New Scene"}
         >
           <Plus className="w-4 h-4" />
         </Button>
@@ -183,7 +181,7 @@ export default function SceneList() {
                   )}
                 </div>
                 
-                {!isEditing && (
+                {!isEditing && !isBroadcastLocked && (
                   <div className="shrink-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={(e) => startRenaming(scene, e)}

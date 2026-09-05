@@ -94,6 +94,12 @@ export async function handleCreatePortalSession(
 
 /**
  * Handles /api/billing/webhook
+ * 
+ * SECURITY:
+ * 1. If STRIPE_WEBHOOK_SECRET is set, signature is strictly verified via constructEvent().
+ * 2. If STRIPE_WEBHOOK_SECRET is missing, the endpoint rejects with HTTP 503 (Service Unavailable)
+ *    unless an explicit non-production development flag (ALLOW_UNSIGNED_WEBHOOKS === 'true') is active.
+ * 3. Never allows accidental production bypass of signature verification.
  */
 export async function handleStripeWebhook(
   rawBody: string | Buffer,
@@ -101,15 +107,48 @@ export async function handleStripeWebhook(
 ) {
   const supabaseAdmin = getAdminClient();
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const isProduction = process.env.NODE_ENV === 'production';
+  const allowUnsignedDev = process.env.ALLOW_UNSIGNED_WEBHOOKS === 'true' && !isProduction;
+
+  if (!webhookSecret && !allowUnsignedDev) {
+    const err: any = new Error('Service Unavailable: Stripe webhook secret is not configured on this server.');
+    err.statusCode = 503;
+    throw err;
+  }
 
   let event: Stripe.Event;
 
-  if (webhookSecret && signatureHeader && process.env.STRIPE_SECRET_KEY) {
+  if (webhookSecret) {
+    if (!signatureHeader) {
+      const err: any = new Error('Bad Request: Missing stripe-signature header.');
+      err.statusCode = 400;
+      throw err;
+    }
     const stripe = getStripeClient();
-    event = stripe.webhooks.constructEvent(rawBody, signatureHeader, webhookSecret);
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, signatureHeader, webhookSecret);
+    } catch (sigErr: any) {
+      const err: any = new Error(`Bad Request: Invalid Stripe webhook signature (${sigErr.message}).`);
+      err.statusCode = 400;
+      throw err;
+    }
+  } else if (allowUnsignedDev) {
+    try {
+      event = typeof rawBody === 'string' ? JSON.parse(rawBody) : JSON.parse(rawBody.toString('utf8'));
+    } catch {
+      const err: any = new Error('Bad Request: Malformed webhook payload JSON.');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (!event || typeof event !== 'object' || !event.type) {
+      const err: any = new Error('Bad Request: Invalid webhook event structure.');
+      err.statusCode = 400;
+      throw err;
+    }
   } else {
-    // If webhook secret is not set, parse JSON safely (for testing / simulated events)
-    event = typeof rawBody === 'string' ? JSON.parse(rawBody) : JSON.parse(rawBody.toString('utf8'));
+    const err: any = new Error('Service Unavailable: Stripe webhook secret is not configured.');
+    err.statusCode = 503;
+    throw err;
   }
 
   const result = await processStripeWebhookEvent(supabaseAdmin, event);

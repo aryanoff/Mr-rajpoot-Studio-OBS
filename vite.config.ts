@@ -10,7 +10,7 @@ function billingApiPlugin() {
     name: 'billing-api-middleware',
     configureServer(server: any) {
       server.middlewares.use(async (req: any, res: any, next: any) => {
-        if (!req.url?.startsWith('/api/billing')) {
+        if (!req.url?.startsWith('/api/billing') && !req.url?.startsWith('/api/health')) {
           return next();
         }
 
@@ -18,6 +18,12 @@ function billingApiPlugin() {
         const pathname = url.pathname;
 
         try {
+          if (pathname === '/api/health' && req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+            return;
+          }
+
           // Read request body
           const chunks: any[] = [];
           for await (const chunk of req) {
@@ -53,7 +59,8 @@ function billingApiPlugin() {
           res.end(JSON.stringify({ error: 'Endpoint not found' }));
         } catch (err: any) {
           const isUnauthorized = typeof err.message === 'string' && err.message.startsWith('Unauthorized');
-          res.statusCode = isUnauthorized ? 401 : 400;
+          const isServiceUnavailable = typeof err.message === 'string' && (err.message.startsWith('Service Unavailable') || err.statusCode === 503);
+          res.statusCode = isUnauthorized ? 401 : isServiceUnavailable ? 503 : (err.statusCode || 400);
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ message: err.message || 'Internal Server Error' }));
         }

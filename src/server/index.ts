@@ -107,9 +107,10 @@ export function createBillingServer(): http.Server {
     } catch (err: any) {
       const errMsg = err.message || 'Internal Server Error';
       const isUnauthorized = typeof errMsg === 'string' && errMsg.startsWith('Unauthorized');
+      const isServiceUnavailable = typeof errMsg === 'string' && (errMsg.startsWith('Service Unavailable') || err.statusCode === 503);
       const isBadRequest = typeof errMsg === 'string' && errMsg.startsWith('Bad Request');
 
-      const statusCode = isUnauthorized ? 401 : isBadRequest ? 400 : 400;
+      const statusCode = isUnauthorized ? 401 : isServiceUnavailable ? 503 : isBadRequest ? 400 : (err.statusCode || 400);
 
       console.error(`[BILLING_API] [${requestId}] Error ${statusCode} on ${req.method} ${pathname}: ${errMsg}`);
       res.statusCode = statusCode;

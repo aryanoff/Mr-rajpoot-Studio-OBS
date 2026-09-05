@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import { Rnd } from "react-rnd";
 import { useStudioStore } from "../../stores/studio.store";
-import { Image as ImageIcon, Video, Lock } from "lucide-react";
+import { Image as ImageIcon, Video, Lock, Loader2, AlertCircle } from "lucide-react";
 import MediaPreview from "./MediaPreview";
 
 export default function StudioCanvas() {
@@ -13,6 +13,8 @@ export default function StudioCanvas() {
   const sceneRatio = useStudioStore((s) => s.sceneRatio);
   
   const sources = useStudioStore((s) => s.sources);
+  const studioLoadingState = useStudioStore((s) => s.studioLoadingState);
+  const isBroadcastLocked = useStudioStore((s) => s.isBroadcastLocked);
   const selectedSourceId = useStudioStore((s) => s.selectedSourceId);
   const setSelectedSource = useStudioStore((s) => s.setSelectedSource);
   const updateSource = useStudioStore((s) => s.updateSource);
@@ -119,18 +121,55 @@ export default function StudioCanvas() {
             transform: `scale(${activeScale})`,
           }}
         >
-          {/* Subtle Output Frame Header Bar in Editor Mode */}
-          {editorMode === 'editor' && (
+          {/* Broadcast Locked Banner */}
+          {isBroadcastLocked ? (
+            <div className="absolute top-2 left-2 z-30 pointer-events-none flex items-center gap-2 bg-amber-950/85 backdrop-blur-md px-3 py-1 rounded-lg text-xs font-semibold text-amber-300 border border-amber-500/40 shadow-lg animate-in fade-in">
+              <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>Broadcast Active — Canvas layout locked to stream snapshot</span>
+            </div>
+          ) : editorMode === 'editor' && (
             <div className="absolute top-2 left-2 z-30 pointer-events-none flex items-center gap-1.5 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded text-[11px] font-mono text-white/80 border border-white/10">
               <span className="w-1.5 h-1.5 rounded-full bg-accent" />
               <span>OUTPUT FRAME ({sceneWidth}×{sceneHeight})</span>
             </div>
           )}
+
+          {/* Loading Scene Canvas Overlay */}
+          {(studioLoadingState === 'INITIALIZING' || studioLoadingState === 'LOADING_SCENE') && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/85 backdrop-blur-sm z-30 gap-3">
+              <Loader2 className="w-9 h-9 text-accent animate-spin" />
+              <div className="text-center">
+                <p className="text-sm font-semibold text-text-primary">Loading scene canvas...</p>
+                <p className="text-xs text-text-muted mt-0.5">Fetching layers and media relations</p>
+              </div>
+            </div>
+          )}
+
+          {/* Error State Overlay */}
+          {studioLoadingState === 'ERROR' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-30 gap-3 p-6 text-center">
+              <AlertCircle className="w-9 h-9 text-status-error" />
+              <div>
+                <p className="text-sm font-semibold text-text-primary">Failed to load scene</p>
+                <p className="text-xs text-text-muted mt-0.5 max-w-sm">There was a problem loading the scene layers. Please refresh or select another scene.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Empty Scene Guide */}
+          {studioLoadingState === 'EMPTY' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center border-2 border-dashed border-border/40 m-8 rounded-xl pointer-events-none gap-2 z-10">
+              <Video className="w-10 h-10 text-text-muted/30" />
+              <p className="text-sm font-semibold text-text-muted">Canvas is empty</p>
+              <p className="text-xs text-text-muted/60">Add a video or image layer from the Sources panel to start</p>
+            </div>
+          )}
+
           {/* Source Layers */}
           {sortedSources.map((source) => {
             if (!source.visible) return null;
             
-            const isSelected = selectedSourceId === source.id && editorMode === 'editor';
+            const isSelected = selectedSourceId === source.id && editorMode === 'editor' && !isBroadcastLocked;
             const isAudio = source.type === 'audio';
 
             // Audio sources are purely non-visual
@@ -142,11 +181,11 @@ export default function StudioCanvas() {
                 size={{ width: source.width || 200, height: source.height || 150 }}
                 position={{ x: source.x, y: source.y }}
                 onDragStop={(_e, d) => {
-                  if (source.locked || editorMode === 'preview') return;
+                  if (source.locked || editorMode === 'preview' || isBroadcastLocked) return;
                   updateSource(source.id, { x: Math.round(d.x), y: Math.round(d.y) });
                 }}
                 onResizeStop={(_e, _direction, ref, _delta, position) => {
-                  if (source.locked || editorMode === 'preview') return;
+                  if (source.locked || editorMode === 'preview' || isBroadcastLocked) return;
                   updateSource(source.id, {
                     width: Math.max(10, Math.round(ref.offsetWidth)),
                     height: Math.max(10, Math.round(ref.offsetHeight)),
@@ -154,8 +193,8 @@ export default function StudioCanvas() {
                     y: Math.round(position.y),
                   });
                 }}
-                disableDragging={source.locked || editorMode === 'preview'}
-                enableResizing={!source.locked && isSelected && editorMode === 'editor'}
+                disableDragging={source.locked || editorMode === 'preview' || isBroadcastLocked}
+                enableResizing={!source.locked && !isBroadcastLocked && isSelected && editorMode === 'editor'}
                 bounds="parent"
                 style={{
                   zIndex: source.z_index,

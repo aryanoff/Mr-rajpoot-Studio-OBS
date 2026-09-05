@@ -5,13 +5,14 @@ import type { Database } from "./types/supabase";
 
 type Stream = Database["public"]["Tables"]["streams"]["Row"];
 
-export type StreamHealth = "GOOD" | "DEGRADED" | "CRITICAL";
+export type StreamHealth = "CONNECTING" | "FLOWING" | "DEGRADED" | "NO_SIGNAL" | "DISCONNECTED";
 
 export interface StreamTelemetry {
   streamId: string;
   bitrate: number;
   fps: number;
   speed: number;
+  frameCount: number;
   uptimeSeconds: number;
   lastTelemetryAt: number;
   lastFrameAt: number;
@@ -29,14 +30,20 @@ export class StreamSupervisor {
   private stableTimer: NodeJS.Timeout | null = null;
   private watchdogInterval: NodeJS.Timeout | null = null;
   
-  // Watchdog Timestamps
+  // Watchdog & Telemetry State
   public lastTelemetryAt: number = 0;
   public lastFrameAt: number = 0;
   public lastBitrate: number = 0;
   public lastFps: number = 30;
   public lastSpeed: number = 1.0;
+  public frameCount: number = 0;
   public rtmpConnectedAt: number = 0;
   public isConnected: boolean = false;
+  public currentHealth: StreamHealth = "CONNECTING";
+
+  // Telemetry Throttle
+  private lastDbWriteAt: number = 0;
+  private lastWrittenHealth: StreamHealth | null = null;
 
   private spawnOptions: {
     inputUrl: string;
@@ -65,6 +72,7 @@ export class StreamSupervisor {
 
   public async start(): Promise<void> {
     this.isStopping = false;
+    this.currentHealth = "CONNECTING";
     await this.spawnProcess();
     this.startWatchdog();
   }
@@ -83,7 +91,9 @@ export class StreamSupervisor {
     }
 
     if (sourceType === 'video_file') {
-      const reconnectArgs = inputUrl.startsWith('http') ? ['-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5'] : [];
+      const reconnectArgs = inputUrl.startsWith('http') 
+        ? ['-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5'] 
+        : [];
       args = [
         '-stream_loop', loopCount, '-re', ...reconnectArgs, '-i', inputUrl,
         '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', '3000k',
@@ -109,6 +119,7 @@ export class StreamSupervisor {
     if (isDryRun) {
       console.log(`[DRY RUN] FFmpeg args: ffmpeg ${args.join(' ')}`);
       this.isConnected = true;
+      this.currentHealth = "FLOWING";
       return;
     }
 
@@ -122,6 +133,18 @@ export class StreamSupervisor {
       let errorBuffer = '';
       let hasResolved = false;
 
+      // 45s bounded startup timeout
+      const startupTimeoutTimer = setTimeout(() => {
+        if (!hasResolved) {
+          hasResolved = true;
+          console.error(`[FFMPEG TIMEOUT] Stream ${this.streamId} startup timed out after 45s with no media flow`);
+          try {
+            child.kill("SIGTERM");
+          } catch {}
+          reject(new Error("Broadcast startup timed out: no media flow observed within 45 seconds"));
+        }
+      }, 45000);
+
       child.stderr?.on("data", async (data: Buffer) => {
         const output = data.toString();
         errorBuffer += output;
@@ -129,47 +152,57 @@ export class StreamSupervisor {
           errorBuffer = errorBuffer.substring(errorBuffer.length - 5000);
         }
 
-        // Parse progress line
-        const timeMatch = output.match(/time=(\d{2}:\d{2}:\d{2})/);
+        // Parse FFmpeg progress tokens
+        const frameMatch = output.match(/frame=\s*(\d+)/);
+        const fpsMatch = output.match(/fps=\s*([\d.]+)/);
         const bitrateMatch = output.match(/bitrate=\s*([\d.]+)\s*kbits\/s/);
         const speedMatch = output.match(/speed=\s*([\d.]+)x/);
-        const fpsMatch = output.match(/fps=\s*([\d.]+)/);
+        const timeMatch = output.match(/time=(\d{2}:\d{2}:\d{2})/);
 
-        if (timeMatch) {
-          const timeStr = timeMatch[1];
-          const bitrate = bitrateMatch ? parseFloat(bitrateMatch[1]) : this.lastBitrate;
-          const speed = speedMatch ? parseFloat(speedMatch[1]) : this.lastSpeed;
-          const fps = fpsMatch ? parseFloat(fpsMatch[1]) : this.lastFps;
+        if (frameMatch || timeMatch || fpsMatch) {
+          const now = Date.now();
+          this.lastTelemetryAt = now;
+          this.lastFrameAt = now;
 
-          this.lastTelemetryAt = Date.now();
-          this.lastFrameAt = Date.now();
-          this.lastBitrate = bitrate;
-          this.lastSpeed = speed;
-          this.lastFps = fps;
+          if (frameMatch) this.frameCount = parseInt(frameMatch[1], 10);
+          if (fpsMatch) this.lastFps = parseFloat(fpsMatch[1]);
+          if (bitrateMatch) this.lastBitrate = parseFloat(bitrateMatch[1]);
+          if (speedMatch) this.lastSpeed = parseFloat(speedMatch[1]);
 
-          await this.handleTelemetryTick(bitrate, speed, fps, timeStr);
-        }
+          // Compute media plane health
+          let health: StreamHealth = "CONNECTING";
+          if (this.frameCount > 0 || this.lastFps > 0) {
+            if (this.lastFps >= 20 && this.lastSpeed >= 0.85 && this.lastSpeed <= 1.25 && this.lastBitrate >= 500) {
+              health = "FLOWING";
+            } else {
+              health = "DEGRADED";
+            }
+          }
 
-        // Detect initial RTMP connection success
-        if (!this.isConnected && (output.includes("fps=") || output.includes("bitrate="))) {
-          this.isConnected = true;
-          this.rtmpConnectedAt = Date.now();
-          this.lastTelemetryAt = Date.now();
-          console.log(`[FFMPEG RTMP CONNECTED] PID=${pid} stream=${this.streamId}`);
-          
-          if (!hasResolved) {
+          this.currentHealth = health;
+
+          // If flowing media observed for the first time, mark connected and resolve startup
+          if (!hasResolved && (health === "FLOWING" || this.frameCount >= 15)) {
             hasResolved = true;
+            clearTimeout(startupTimeoutTimer);
+            this.isConnected = true;
+            this.rtmpConnectedAt = now;
+            console.log(`[FFMPEG FLOWING] PID=${pid} stream=${this.streamId} verified flowing at ${this.lastFps}fps, ${this.lastSpeed}x, ${this.lastBitrate}kbps`);
+            this.scheduleStabilityReset();
             resolve();
           }
 
-          // Schedule stability window (60s of stable streaming resets restart counter)
-          this.scheduleStabilityReset();
+          if (timeMatch) {
+            await this.handleTelemetryTick(this.lastBitrate, this.lastSpeed, this.lastFps, timeMatch[1], health);
+          }
         }
       });
 
       child.on("error", (err) => {
+        clearTimeout(startupTimeoutTimer);
         console.error(`[FFMPEG ERROR] Spawn error PID=${pid} stream=${this.streamId}: ${err.message}`);
         this.isConnected = false;
+        this.currentHealth = "DISCONNECTED";
         if (!hasResolved) {
           hasResolved = true;
           reject(err);
@@ -177,8 +210,10 @@ export class StreamSupervisor {
       });
 
       child.on("close", async (code, signal) => {
+        clearTimeout(startupTimeoutTimer);
         console.log(`[FFMPEG EXIT] PID=${pid} stream=${this.streamId} code=${code} signal=${signal || 'none'}`);
         this.isConnected = false;
+        this.currentHealth = "DISCONNECTED";
         this.process = null;
 
         if (this.isStopping) {
@@ -188,7 +223,7 @@ export class StreamSupervisor {
 
         if (!hasResolved) {
           hasResolved = true;
-          reject(new Error(`FFmpeg exited before connecting (code ${code})`));
+          reject(new Error(`FFmpeg exited before media flow established (exit code ${code})`));
         } else {
           await this.handleUnexpectedExit(code, errorBuffer);
         }
@@ -196,23 +231,25 @@ export class StreamSupervisor {
     });
   }
 
-  private async handleTelemetryTick(bitrate: number, speed: number, fps: number, timeStr: string): Promise<void> {
+  private async handleTelemetryTick(bitrate: number, speed: number, fps: number, timeStr: string, health: StreamHealth): Promise<void> {
+    const now = Date.now();
+    // Throttle DB writes to at most once every 3000ms or on health transition
+    const shouldWrite = (now - this.lastDbWriteAt >= 3000) || (health !== this.lastWrittenHealth);
+    if (!shouldWrite) return;
+
     const [hours, minutes, seconds] = timeStr.split(':').map(Number);
     const uptimeSeconds = (hours || 0) * 3600 + (minutes || 0) * 60 + (seconds || 0);
 
-    let health: StreamHealth = "GOOD";
-    if (speed < 0.80 || speed > 1.25 || bitrate < 800) {
-      health = "DEGRADED";
-    }
-
     try {
       const supabaseAny = this.supabase as any;
-      // Upsert telemetry and explicitly bump streams.updated_at to protect against stale job reapers
       await Promise.all([
         supabaseAny.from("stream_analytics").upsert({
           stream_id: this.streamId,
           user_id: this.stream.user_id,
           avg_bitrate_kbps: Math.round(bitrate),
+          current_fps: Math.round(fps * 10) / 10,
+          current_speed: Math.round(speed * 100) / 100,
+          health: health,
           uptime_seconds: uptimeSeconds,
           updated_at: new Date().toISOString()
         }, { onConflict: 'stream_id' }),
@@ -220,6 +257,9 @@ export class StreamSupervisor {
           updated_at: new Date().toISOString()
         }).eq("id", this.streamId)
       ]);
+
+      this.lastDbWriteAt = now;
+      this.lastWrittenHealth = health;
     } catch (err) {
       console.error(`[TELEMETRY WRITE ERROR] stream=${this.streamId}:`, err);
     }
@@ -243,12 +283,19 @@ export class StreamSupervisor {
       const now = Date.now();
       const timeSinceTelemetry = now - this.lastTelemetryAt;
 
-      // 1. Telemetry fresh (<15s) -> Ensure database says live
-      if (this.isConnected && timeSinceTelemetry <= 15000) {
-        // Healthy
-      } else if (this.isConnected && timeSinceTelemetry > 15000 && timeSinceTelemetry <= 30000) {
-        console.warn(`[WATCHDOG DEGRADED] stream=${this.streamId} telemetry silent for ${Math.round(timeSinceTelemetry / 1000)}s`);
-        await this.updateStatus("degraded", `Data rate low or telemetry delayed (${Math.round(timeSinceTelemetry / 1000)}s)`);
+      if (this.isConnected && timeSinceTelemetry <= 10000) {
+        // Normal flowing telemetry
+      } else if (this.isConnected && timeSinceTelemetry > 10000 && timeSinceTelemetry <= 30000) {
+        // Stalled frames -> No signal warning
+        this.currentHealth = "NO_SIGNAL";
+        console.warn(`[WATCHDOG NO_SIGNAL] stream=${this.streamId} no frames for ${Math.round(timeSinceTelemetry / 1000)}s.`);
+        try {
+          const supabaseAny = this.supabase as any;
+          await supabaseAny.from("stream_analytics").update({
+            health: "NO_SIGNAL",
+            updated_at: new Date().toISOString()
+          }).eq("stream_id", this.streamId);
+        } catch {}
       } else if (timeSinceTelemetry > 30000 && timeSinceTelemetry <= 60000) {
         console.warn(`[WATCHDOG STALL] stream=${this.streamId} no telemetry for ${Math.round(timeSinceTelemetry / 1000)}s. Marking reconnecting.`);
         await this.updateStatus("reconnecting", "Stream stalled — attempting automatic recovery");
@@ -264,7 +311,6 @@ export class StreamSupervisor {
 
     console.warn(`[SUPERVISOR] Unexpected exit (code ${code}) for stream=${this.streamId}`);
     
-    // Classify error
     let reason = `Process exited with code ${code}`;
     if (stderr.includes("Broken pipe") || stderr.includes("Connection reset")) {
       reason = "RTMP connection dropped by remote server";
@@ -294,7 +340,6 @@ export class StreamSupervisor {
     console.log(`[SUPERVISOR RECONNECT] stream=${this.streamId} attempt ${this.restartCount}/${this.maxRestarts}. Retrying in ${delaySeconds}s...`);
     await this.updateStatus("reconnecting", `Reconnecting (Attempt ${this.restartCount}/${this.maxRestarts}) in ${delaySeconds}s: ${reason}`);
 
-    // Kill existing dead or hung process
     if (this.process) {
       try {
         this.process.kill("SIGTERM");
@@ -340,11 +385,17 @@ export class StreamSupervisor {
 
     if (this.process) {
       console.log(`[SUPERVISOR STOP] Sending SIGTERM to PID=${this.process.pid} stream=${this.streamId}`);
-      this.process.kill("SIGTERM");
       const proc = this.process;
+      try {
+        proc.kill("SIGTERM");
+      } catch (err) {
+        console.warn(`[SUPERVISOR STOP] SIGTERM error PID=${proc.pid}:`, err);
+      }
       setTimeout(() => {
         try {
-          proc.kill("SIGKILL");
+          if (proc.exitCode === null) {
+            proc.kill("SIGKILL");
+          }
         } catch {}
       }, 5000);
       this.process = null;

@@ -17,8 +17,29 @@ export default function AuthCallback() {
       try {
         const supabase = getSupabase();
         
-        // Supabase auto-handles the `#access_token=...` hash fragment in the URL
-        // when getSession() is called, and sets the local session.
+        // Parse search params (?code=, ?error=, ?error_description=)
+        const searchParams = new URLSearchParams(window.location.search);
+        // Parse hash params (#access_token=, #error=, #error_description=)
+        const rawHash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+        const hashParams = new URLSearchParams(rawHash);
+
+        // 1. Check for OAuth error responses
+        const errorParam = searchParams.get("error") || hashParams.get("error");
+        const errorDesc = searchParams.get("error_description") || hashParams.get("error_description");
+        if (errorParam || errorDesc) {
+          throw new Error(errorDesc || errorParam || "Authentication failed from OAuth provider.");
+        }
+
+        // 2. PKCE flow: if authorization code is in query string, exchange it for session
+        const code = searchParams.get("code");
+        if (code) {
+          const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeErr) {
+            throw exchangeErr;
+          }
+        }
+
+        // 3. Verify session was established (via PKCE exchange or Supabase hash fragment auto-detection)
         const { data, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
@@ -26,14 +47,26 @@ export default function AuthCallback() {
         }
 
         if (!data.session) {
-          throw new Error("No session found in the URL callback");
+          throw new Error("No active session could be established from the login callback.");
         }
 
-        // Re-initialize the auth store so it fetches the profile/role correctly
+        // 4. Re-initialize the auth store so profile/role/permissions are loaded
         await initializeAuth();
         
+        // 5. Restore intended destination from sessionStorage
+        let destination = "/dashboard";
+        try {
+          const savedTarget = sessionStorage.getItem("auth_redirect_target");
+          if (savedTarget && savedTarget.startsWith("/") && !savedTarget.startsWith("//")) {
+            destination = savedTarget;
+            sessionStorage.removeItem("auth_redirect_target");
+          }
+        } catch {
+          // ignore storage read errors
+        }
+
         if (mounted) {
-          navigate("/dashboard", { replace: true });
+          navigate(destination, { replace: true });
         }
       } catch (err: any) {
         console.error("Auth callback error:", err);

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { NavLink } from "react-router-dom";
+import { NavLink, useSearchParams } from "react-router-dom";
 import { Mail, Lock, Eye, EyeOff, Radio, Loader2 } from "lucide-react";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
@@ -8,6 +8,7 @@ import { getSupabase } from "../../lib/supabase";
 import { AuthService } from "../../features/auth/auth.service";
 
 export default function Login() {
+  const [searchParams] = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,7 +45,8 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
     setError(null);
-    const { error } = await AuthService.signInWithGoogle();
+    const redirectTarget = searchParams.get("redirect") || undefined;
+    const { error } = await AuthService.signInWithGoogle(redirectTarget);
     
     if (error) {
       setError(error);

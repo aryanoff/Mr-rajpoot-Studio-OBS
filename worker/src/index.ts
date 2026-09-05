@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
-import { pollJobs, workerHeartbeat, workerId, MAX_CONCURRENT_STREAMS, stopAllSupervisors, getActiveProcessCount } from "./stateMachine";
+import { pollJobs, workerHeartbeat, workerId, MAX_CONCURRENT_STREAMS, stopAllSupervisors, getActiveProcessCount, performStartupRecovery } from "./stateMachine";
 import type { Database } from "./types/supabase";
 
 dotenv.config();
@@ -42,6 +42,9 @@ async function start() {
 
   // Initial heartbeat & registration
   await workerHeartbeat(supabase);
+
+  // Perform startup recovery for any stale stopping streams
+  await performStartupRecovery(supabase);
   
   // 1. Independent Heartbeat Loop
   heartbeatIntervalId = setInterval(async () => {

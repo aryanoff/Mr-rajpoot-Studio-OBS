@@ -67,6 +67,14 @@ export interface StudioState {
   toggleBottomPanel: () => void;
   reset: () => void;
   
+  // Studio Loading & Lifecycle State
+  studioLoadingState: 'INITIALIZING' | 'LOADING_SCENE' | 'EMPTY' | 'READY' | 'ERROR';
+  setStudioLoadingState: (loadingState: 'INITIALIZING' | 'LOADING_SCENE' | 'EMPTY' | 'READY' | 'ERROR') => void;
+
+  // Broadcast Lock Mode (Freezes mutations during active streams)
+  isBroadcastLocked: boolean;
+  setIsBroadcastLocked: (locked: boolean) => void;
+
   // Save status
   saveStatus: 'idle' | 'unsaved' | 'saving' | 'saved' | 'error';
   setSaveStatus: (status: 'idle' | 'unsaved' | 'saving' | 'saved' | 'error') => void;
@@ -120,6 +128,22 @@ export const useStudioStore = create<StudioState>((set) => ({
   saveStatus: 'idle',
   
   setSaveStatus: (saveStatus) => set({ saveStatus }),
+
+  studioLoadingState: 'LOADING_SCENE',
+  setStudioLoadingState: (studioLoadingState) =>
+    set((state) =>
+      state.studioLoadingState === studioLoadingState
+        ? state
+        : { studioLoadingState }
+    ),
+
+  isBroadcastLocked: false,
+  setIsBroadcastLocked: (isBroadcastLocked) =>
+    set((state) =>
+      state.isBroadcastLocked === isBroadcastLocked
+        ? state
+        : { isBroadcastLocked }
+    ),
   
   setScene: (scene, sources) => {
     // Derive ratio from width/height if possible
@@ -129,6 +153,8 @@ export const useStudioStore = create<StudioState>((set) => ({
     else if (Math.abs(aspect - 4/3) < 0.05) ratio = '4:3';
     else if (Math.abs(aspect - 1) < 0.05) ratio = '1:1';
     else if (Math.abs(aspect - 21/9) < 0.05) ratio = '21:9';
+
+    const derivedState = sources && sources.length > 0 ? 'READY' : 'EMPTY';
 
     set((state) => ({
       sceneId: scene.id,
@@ -140,6 +166,7 @@ export const useStudioStore = create<StudioState>((set) => ({
       sceneBg: scene.background || '#000000',
       sceneVersion: scene.version || 1,
       sources,
+      studioLoadingState: derivedState,
       // If streamTitle is empty, pre-fill from scene name
       streamTitle: state.streamTitle || scene.name,
       history: [{ sources }],
@@ -173,7 +200,11 @@ export const useStudioStore = create<StudioState>((set) => ({
   
   addSource: (source) => set((state) => {
     const newSources = [...state.sources, source];
-    return pushHistory(state, newSources);
+    const historyUpdate = pushHistory(state, newSources);
+    return {
+      ...historyUpdate,
+      studioLoadingState: 'READY'
+    };
   }),
   
   updateSource: (id, updates) => set((state) => {
@@ -186,6 +217,7 @@ export const useStudioStore = create<StudioState>((set) => ({
     const updates = pushHistory(state, newSources);
     return {
       ...updates,
+      studioLoadingState: newSources.length > 0 ? 'READY' : 'EMPTY',
       selectedSourceId: state.selectedSourceId === id ? null : state.selectedSourceId
     };
   }),
@@ -274,5 +306,7 @@ export const useStudioStore = create<StudioState>((set) => ({
     history: [{ sources: [] }],
     historyIndex: 0,
     saveStatus: 'idle',
+    studioLoadingState: 'LOADING_SCENE',
+    isBroadcastLocked: false,
   }),
 }));

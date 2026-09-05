@@ -17,15 +17,27 @@ export function getActiveProcessCount(): number {
 export async function stopSupervisor(streamId: string): Promise<void> {
   const sup = activeSupervisors.get(streamId);
   if (sup) {
-    await sup.stop();
-    activeSupervisors.delete(streamId);
+    try {
+      await Promise.race([
+        sup.stop(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Supervisor stop timeout after 10s")), 10000))
+      ]);
+    } catch (err) {
+      console.error(`[SUPERVISOR TIMEOUT/ERROR] stream=${streamId}:`, err);
+    } finally {
+      activeSupervisors.delete(streamId);
+    }
   }
 }
 
 export async function stopAllSupervisors(): Promise<void> {
   const supervisors = Array.from(activeSupervisors.values());
   for (const sup of supervisors) {
-    await sup.stop();
+    try {
+      await sup.stop();
+    } catch (err) {
+      console.error("[SUPERVISOR STOP ERROR]:", err);
+    }
   }
   activeSupervisors.clear();
 }
@@ -105,6 +117,24 @@ export async function pollJobs(supabase: SupabaseClient<Database>) {
     }
   }
 
+  // 2b. Handle unassigned stopping streams (e.g., user stopped before worker assignment)
+  const { data: unassignedStopping } = await supabaseAny
+    .from("streams")
+    .select("id")
+    .is("worker_id", null)
+    .eq("status", "stopping");
+
+  if (unassignedStopping && unassignedStopping.length > 0) {
+    for (const stream of unassignedStopping) {
+      console.log(`[STREAM STOPPING] Unassigned stream ${stream.id} in stopping state -> finalizing to completed`);
+      await supabaseAny.from("streams").update({
+        status: "completed",
+        updated_at: new Date().toISOString()
+      }).eq("id", stream.id);
+      await logStatus(supabase, stream.id, "completed", "Stop request finalized: stream was unassigned");
+    }
+  }
+
   // 3. Reap stale jobs (only for unassigned or long-dead worker nodes)
   try {
     await supabaseAny.rpc("reap_stale_jobs", { timeout_minutes: 5 });
@@ -113,9 +143,44 @@ export async function pollJobs(supabase: SupabaseClient<Database>) {
   }
 }
 
+export async function performStartupRecovery(supabase: SupabaseClient<Database>) {
+  const supabaseAny = supabase as any;
+  console.log(`[STARTUP RECOVERY] Checking for stale/orphaned stopping streams...`);
+  try {
+    // 1. If this worker was previously running and restarted, finalize any stopping streams assigned to this worker
+    const { data: hangingStreams } = await supabaseAny
+      .from("streams")
+      .select("id, status")
+      .eq("worker_id", workerId)
+      .eq("status", "stopping");
+
+    if (hangingStreams && hangingStreams.length > 0) {
+      for (const s of hangingStreams) {
+        console.log(`[STARTUP RECOVERY] Finalizing recovered stopping stream: ${s.id}`);
+        await supabaseAny.from("streams").update({
+          status: "completed",
+          updated_at: new Date().toISOString()
+        }).eq("id", s.id);
+        await logStatus(supabase, s.id, "completed", "Stream cleanly completed: recovered after worker restart");
+      }
+    }
+
+    // 2. Trigger RPC reap_stale_jobs immediately on worker startup to clear any dead worker leases
+    const { data: reapedCount, error: reapErr } = await supabaseAny.rpc("reap_stale_jobs", { timeout_minutes: 2 });
+    if (reapErr) {
+      console.error("[STARTUP RECOVERY] reap_stale_jobs error:", reapErr);
+    } else {
+      console.log(`[STARTUP RECOVERY] Reaper executed on startup. Reaped: ${reapedCount ?? 0} streams.`);
+    }
+  } catch (err) {
+    console.error("[STARTUP RECOVERY] Unexpected error during startup recovery:", err);
+  }
+}
+
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { downloadAssetToLocalCache } from "./mediaCache";
 
 async function startStream(supabase: SupabaseClient<Database>, stream: Stream) {
   const supabaseAny = supabase as any;
@@ -180,18 +245,32 @@ async function startStream(supabase: SupabaseClient<Database>, stream: Stream) {
     isScene = true;
     const sceneSnapshot = typeof stream.scene_snapshot === 'string' ? JSON.parse(stream.scene_snapshot) : stream.scene_snapshot;
     
-    // Resolve all media URLs with 24-hour expiration
+    // Resolve and locally cache all media assets for reliable seekable looping
     for (const source of sceneSnapshot.sources) {
       if (source.media_id && source.media_path) {
-        if (!source.media_path.startsWith("http") && !source.media_path.startsWith("rtmp")) {
+        let remoteUrl = source.media_path;
+        if (!remoteUrl.startsWith("http") && !remoteUrl.startsWith("rtmp")) {
           const { data: signedData, error: signedError } = await supabase.storage.from("user_media").createSignedUrl(source.media_path, 86400);
           if (signedError || !signedData) {
              await logStatus(supabase, stream.id, "starting", `Failed to sign URL for scene source ${source.media_path}: ${signedError?.message}`);
              continue;
           }
-          source.resolvedUrl = signedData.signedUrl;
+          remoteUrl = signedData.signedUrl;
+        }
+
+        // Cache video, audio, and image assets locally to guarantee seekable inputs for FFmpeg -stream_loop -1
+        if (remoteUrl.startsWith("http")) {
+          try {
+            console.log(`[CACHE] Downloading scene source ${source.id} (${source.media_id}) to worker cache...`);
+            const localFile = await downloadAssetToLocalCache(remoteUrl, source.media_id);
+            source.resolvedUrl = localFile;
+            console.log(`[CACHE SUCCESS] Scene source ${source.id} cached at: ${localFile}`);
+          } catch (cacheErr: any) {
+            console.warn(`[CACHE WARNING] Caching failed for source ${source.id}: ${cacheErr.message}. Falling back to remote URL.`);
+            source.resolvedUrl = remoteUrl;
+          }
         } else {
-          source.resolvedUrl = source.media_path;
+          source.resolvedUrl = remoteUrl;
         }
       }
     }
@@ -247,16 +326,29 @@ async function startStream(supabase: SupabaseClient<Database>, stream: Stream) {
       fs.writeFileSync(tempPath, concatContent);
       finalUrl = tempPath;
     } else {
-      finalUrl = sources[0].uri;
-      if (finalUrl && !finalUrl.startsWith("http") && !finalUrl.startsWith("rtmp")) {
-        const { data: signedData, error: signedError } = await supabase.storage.from("user_media").createSignedUrl(finalUrl, 86400);
+      let rawUri = sources[0].uri;
+      if (rawUri && !rawUri.startsWith("http") && !rawUri.startsWith("rtmp")) {
+        const { data: signedData, error: signedError } = await supabase.storage.from("user_media").createSignedUrl(rawUri, 86400);
         if (signedError || !signedData) {
           const errMsg = `Failed to sign URL: ${signedError?.message}`;
           await logStatus(supabase, stream.id, "error", errMsg);
           await supabaseAny.from("streams").update({ status: "error", updated_at: new Date().toISOString() }).eq("id", stream.id);
           return;
         }
-        finalUrl = signedData.signedUrl;
+        rawUri = signedData.signedUrl;
+      }
+
+      if (rawUri.startsWith("http")) {
+        try {
+          console.log(`[CACHE] Downloading video_file asset for stream ${stream.id} to worker cache...`);
+          finalUrl = await downloadAssetToLocalCache(rawUri, sources[0].id || stream.id);
+          console.log(`[CACHE SUCCESS] Video file for stream ${stream.id} cached at: ${finalUrl}`);
+        } catch (cacheErr: any) {
+          console.warn(`[CACHE WARNING] Caching failed for stream ${stream.id}: ${cacheErr.message}. Falling back to remote URL.`);
+          finalUrl = rawUri;
+        }
+      } else {
+        finalUrl = rawUri;
       }
     }
   }

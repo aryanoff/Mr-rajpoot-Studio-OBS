@@ -40,7 +40,20 @@ export class AuthService {
     return { data, error: null };
   }
 
-  static async signInWithGoogle() {
+  static async signInWithGoogle(targetDestination?: string) {
+    if (typeof window !== "undefined") {
+      try {
+        const dest = targetDestination || window.location.pathname;
+        if (dest && dest !== "/login" && dest !== "/register" && !dest.startsWith("/auth/callback")) {
+          sessionStorage.setItem("auth_redirect_target", dest);
+        } else {
+          sessionStorage.setItem("auth_redirect_target", "/dashboard");
+        }
+      } catch {
+        // sessionStorage may fail in private mode/restricted envs
+      }
+    }
+
     const supabase = getSupabase();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",

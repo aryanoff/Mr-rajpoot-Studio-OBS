@@ -996,7 +996,10 @@ export type Database = {
         Row: {
           avg_bitrate_kbps: number
           created_at: string
+          current_fps: number | null
+          current_speed: number | null
           dropped_frames_pct: number
+          health: string | null
           id: string
           stream_id: string
           updated_at: string
@@ -1006,7 +1009,10 @@ export type Database = {
         Insert: {
           avg_bitrate_kbps?: number
           created_at?: string
+          current_fps?: number | null
+          current_speed?: number | null
           dropped_frames_pct?: number
+          health?: string | null
           id?: string
           stream_id: string
           updated_at?: string
@@ -1016,7 +1022,10 @@ export type Database = {
         Update: {
           avg_bitrate_kbps?: number
           created_at?: string
+          current_fps?: number | null
+          current_speed?: number | null
           dropped_frames_pct?: number
+          health?: string | null
           id?: string
           stream_id?: string
           updated_at?: string
@@ -1858,6 +1867,7 @@ export type Database = {
       stream_status:
         | "draft"
         | "queued"
+        | "starting"
         | "live"
         | "error"
         | "completed"
@@ -2024,6 +2034,7 @@ export const Constants = {
       stream_status: [
         "draft",
         "queued",
+        "starting",
         "live",
         "error",
         "completed",

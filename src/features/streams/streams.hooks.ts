@@ -9,6 +9,12 @@ export type Stream = Database["public"]["Tables"]["streams"]["Row"];
 export type MediaAsset = Database["public"]["Tables"]["media_assets"]["Row"];
 export type StreamDestination = Database["public"]["Tables"]["stream_destinations"]["Row"];
 
+let fastPollingUntil = 0;
+
+export function triggerFastPolling(durationMs = 20000) {
+  fastPollingUntil = Math.max(fastPollingUntil, Date.now() + durationMs);
+}
+
 export function useStreams() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
@@ -24,6 +30,14 @@ export function useStreams() {
         schema: "public", 
         table: "streams", 
         filter: `user_id=eq.${userId}` 
+      }, () => {
+        queryClient.invalidateQueries({ queryKey: ["streams", userId] });
+      })
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "stream_analytics",
+        filter: `user_id=eq.${userId}`
       }, () => {
         queryClient.invalidateQueries({ queryKey: ["streams", userId] });
       })
@@ -45,9 +59,45 @@ export function useStreams() {
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as (Stream & { stream_analytics?: any[] | null; stream_destinations?: StreamDestination[] | null })[];
+      return data as (Stream & { 
+        stream_analytics?: Database["public"]["Tables"]["stream_analytics"]["Row"][] | null; 
+        stream_destinations?: StreamDestination[] | null 
+      })[];
     },
     enabled: !!userId,
+    refetchInterval: (query) => {
+      // 1. Post-mutation fast polling window (Start / Stop action fallback)
+      if (Date.now() < fastPollingUntil) {
+        return 1500;
+      }
+
+      const streams = query.state.data;
+      if (!streams || streams.length === 0) {
+        return 15000;
+      }
+
+      // Check most recent non-terminal stream
+      const activeStream = streams.find(
+        (s) => s.status !== "completed" && s.status !== "cancelled" && s.status !== "error"
+      );
+
+      if (!activeStream) {
+        return 15000; // Idle/terminal state
+      }
+
+      switch (activeStream.status) {
+        case "queued":
+        case "starting":
+        case "reconnecting":
+        case "stopping":
+          return 1500; // Transitional state: 1.5s fast polling
+        case "live":
+          return 4000; // Live stream telemetry: 4s adaptive polling
+        default:
+          return 15000;
+      }
+    },
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -301,7 +351,11 @@ export function useCreateStream() {
 
       return stream;
     },
+    onMutate: () => {
+      triggerFastPolling(25000);
+    },
     onSuccess: () => {
+      triggerFastPolling(25000);
       queryClient.invalidateQueries({ queryKey: ["streams", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["billing", "usage"] });
     },
@@ -319,12 +373,20 @@ export function useStopStream() {
       const supabase = getSupabase() as any;
       const { error } = await supabase
         .from("streams")
-        .update({ status: "stopping" })
+        .update({ 
+          status: "stopping",
+          updated_at: new Date().toISOString()
+        })
         .eq("id", streamId)
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        .not("status", "in", '("completed","cancelled","error")');
       if (error) throw error;
     },
+    onMutate: () => {
+      triggerFastPolling(25000);
+    },
     onSuccess: () => {
+      triggerFastPolling(25000);
       queryClient.invalidateQueries({ queryKey: ["streams", userId] });
     },
   });
