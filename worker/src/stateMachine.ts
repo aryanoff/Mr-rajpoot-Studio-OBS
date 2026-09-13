@@ -1,11 +1,41 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { StreamSupervisor } from "./supervisor";
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuidv4, validate as validateUuid } from "uuid";
 import type { Database } from "./types/supabase";
 
 type Stream = Database["public"]["Tables"]["streams"]["Row"];
 
-export const workerId = process.env.WORKER_ID || uuidv4();
+export function isValidUuid(id: string): boolean {
+  return validateUuid(id);
+}
+
+/**
+ * Resolves and validates the worker ID:
+ * - If WORKER_ID is absent / empty: generates a valid uuidv4().
+ * - If WORKER_ID is present: verifies it is a syntactically valid UUID.
+ * - If invalid: throws an Error ("Invalid WORKER_ID: expected UUID").
+ */
+export function resolveWorkerId(rawId?: string): string {
+  if (!rawId || rawId.trim() === "") {
+    return uuidv4();
+  }
+  const trimmed = rawId.trim();
+  if (!validateUuid(trimmed)) {
+    throw new Error("Invalid WORKER_ID: expected UUID");
+  }
+  return trimmed;
+}
+
+function initWorkerId(): string {
+  try {
+    return resolveWorkerId(process.env.WORKER_ID);
+  } catch (err: any) {
+    console.error(`❌ Fatal: ${err?.message || "Invalid WORKER_ID: expected UUID"}`);
+    process.exit(1);
+  }
+}
+
+export const workerId = initWorkerId();
 export const MAX_CONCURRENT_STREAMS = parseInt(process.env.MAX_CONCURRENT_STREAMS || "2", 10);
 
 const activeSupervisors = new Map<string, StreamSupervisor>();
@@ -42,20 +72,37 @@ export async function stopAllSupervisors(): Promise<void> {
   activeSupervisors.clear();
 }
 
-export async function workerHeartbeat(supabase: SupabaseClient<Database>) {
+let lastHeartbeatHealthy = false;
+
+export function isHeartbeatHealthy(): boolean {
+  return lastHeartbeatHealthy;
+}
+
+export async function workerHeartbeat(supabase: SupabaseClient<Database>): Promise<boolean> {
   const supabaseAny = supabase as any;
   try {
     const activeCount = getActiveProcessCount();
       
-    await supabaseAny.from('worker_nodes').upsert({
+    const { error } = await supabaseAny.from('worker_nodes').upsert({
       id: workerId,
       status: 'online',
       active_streams: activeCount,
       last_heartbeat: new Date().toISOString(),
       updated_at: new Date().toISOString()
     });
-  } catch (e) {
-    console.error("Failed to update worker heartbeat:", e);
+
+    if (error) {
+      lastHeartbeatHealthy = false;
+      console.error(`❌ [WORKER HEARTBEAT ERROR] operation=upsert table=worker_nodes workerId=${workerId} code=${error.code || 'UNKNOWN'} message="${error.message}" details="${error.details || ''}"`);
+      return false;
+    }
+
+    lastHeartbeatHealthy = true;
+    return true;
+  } catch (e: any) {
+    lastHeartbeatHealthy = false;
+    console.error(`❌ [WORKER HEARTBEAT EXCEPTION] operation=upsert table=worker_nodes workerId=${workerId}:`, e?.message || e);
+    return false;
   }
 }
 

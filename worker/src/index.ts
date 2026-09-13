@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
-import { pollJobs, workerHeartbeat, workerId, MAX_CONCURRENT_STREAMS, stopAllSupervisors, getActiveProcessCount, performStartupRecovery } from "./stateMachine";
+import { pollJobs, workerHeartbeat, workerId, MAX_CONCURRENT_STREAMS, stopAllSupervisors, getActiveProcessCount, performStartupRecovery, isHeartbeatHealthy } from "./stateMachine";
 import type { Database } from "./types/supabase";
 
 dotenv.config();
@@ -41,7 +41,12 @@ async function start() {
   console.log("=================================================");
 
   // Initial heartbeat & registration
-  await workerHeartbeat(supabase);
+  const registered = await workerHeartbeat(supabase);
+  if (registered) {
+    console.log(`✅ [WORKER REGISTERED] Worker ${workerId} is active in worker_nodes.`);
+  } else {
+    console.error(`❌ [WORKER INITIAL REGISTRATION FAILED] Worker ${workerId} could NOT register in worker_nodes.`);
+  }
 
   // Perform startup recovery for any stale stopping streams
   await performStartupRecovery(supabase);
@@ -102,7 +107,8 @@ async function start() {
     if (isShuttingDown) return;
     const memMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     const activeCount = getActiveProcessCount();
-    console.log(`[HEALTH REPORT] Worker=${workerId} Status=ONLINE ActiveStreams=${activeCount}/${MAX_CONCURRENT_STREAMS} MemoryHeap=${memMb}MB Scheduler=OK Retention=OK MediaProcessor=OK`);
+    const hbStatus = isHeartbeatHealthy() ? "OK" : "DEGRADED/FAIL";
+    console.log(`[HEALTH REPORT] Worker=${workerId} Status=${isHeartbeatHealthy() ? 'ONLINE' : 'HEARTBEAT_FAIL'} Heartbeat=${hbStatus} ActiveStreams=${activeCount}/${MAX_CONCURRENT_STREAMS} MemoryHeap=${memMb}MB Scheduler=OK Retention=OK MediaProcessor=OK`);
   }, 300000);
 }
 
@@ -121,13 +127,17 @@ async function shutdown(signal: string) {
   
   // 1. Mark worker as draining
   try {
-    await supabaseAny.from('worker_nodes').update({
+    const { error: drainErr } = await supabaseAny.from('worker_nodes').update({
       status: 'draining',
       updated_at: new Date().toISOString()
     }).eq('id', workerId);
-    console.log("Worker status updated to: DRAINING");
-  } catch (e) {
-    console.error("Failed to update status to draining:", e);
+    if (drainErr) {
+      console.error(`❌ [WORKER DRAIN ERROR] operation=update table=worker_nodes workerId=${workerId} code=${drainErr.code || 'UNKNOWN'} message="${drainErr.message}"`);
+    } else {
+      console.log("Worker status updated to: DRAINING");
+    }
+  } catch (e: any) {
+    console.error(`❌ [WORKER DRAIN EXCEPTION] operation=update table=worker_nodes workerId=${workerId}:`, e?.message || e);
   }
 
   // 2. Terminate active stream supervisors gracefully
@@ -140,14 +150,18 @@ async function shutdown(signal: string) {
 
   // 3. Mark worker as offline
   try {
-    await supabaseAny.from('worker_nodes').update({
+    const { error: offlineErr } = await supabaseAny.from('worker_nodes').update({
       status: 'offline',
       active_streams: 0,
       updated_at: new Date().toISOString()
     }).eq('id', workerId);
-    console.log("Worker marked OFFLINE in database. Goodbye.");
-  } catch (e) {
-    console.error("Failed to mark worker offline:", e);
+    if (offlineErr) {
+      console.error(`❌ [WORKER OFFLINE ERROR] operation=update table=worker_nodes workerId=${workerId} code=${offlineErr.code || 'UNKNOWN'} message="${offlineErr.message}"`);
+    } else {
+      console.log("Worker marked OFFLINE in database. Goodbye.");
+    }
+  } catch (e: any) {
+    console.error(`❌ [WORKER OFFLINE EXCEPTION] operation=update table=worker_nodes workerId=${workerId}:`, e?.message || e);
   }
   
   process.exit(0);
