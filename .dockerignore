@@ -1,0 +1,11 @@
+.env
+.env.*
+node_modules
+dist
+worker/.env
+worker/.env.*
+worker/node_modules
+worker/dist
+.git
+.gitignore
+*.log

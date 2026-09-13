@@ -10,9 +10,15 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+      - MEDIA_CACHE_DIR=/data/media_cache
       # VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY should be in .env
+    volumes:
+      - media_cache:/data/media_cache
     logging:
       driver: "json-file"
       options:
         max-size: "50m"
         max-file: "3"
+
+volumes:
+  media_cache:

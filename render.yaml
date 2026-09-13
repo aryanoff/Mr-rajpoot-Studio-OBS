@@ -1,0 +1,25 @@
+services:
+  - type: worker
+    name: mr-rajpoot-studio-worker
+    runtime: docker
+    dockerfilePath: worker/Dockerfile
+    dockerContext: worker
+    region: oregon
+    plan: starter
+    disk:
+      name: media-cache
+      mountPath: /data/media_cache
+      sizeGB: 10
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: WORKER_ID
+        value: render-cloud-worker-01
+      - key: MEDIA_CACHE_DIR
+        value: /data/media_cache
+      - key: MAX_CONCURRENT_STREAMS
+        value: 2
+      - key: NODE_ENV
+        value: production
